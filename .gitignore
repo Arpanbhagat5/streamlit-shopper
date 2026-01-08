@@ -1,0 +1,43 @@
+# ignore .venv
+.venv/
+# ignore env files
+.env
+.env.*
+# ignore macOS system files
+.DS_Store
+
+# ignore Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+# ignore Playwright artifacts
+playwright-report/
+trace.zip
+# ignore Streamlit cache
+.streamlit/cache/
+# ignore logs
+logs/
+*.log
+# ignore VSCode settings
+.vscode/
+# ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# ignore pytest cache
+.pytest_cache/
+# ignore mypy cache
+.mypy_cache/
+# ignore coverage reports
+htmlcov/
+.coverage
+.coverage.*
+# ignore build and dist directories
+build/
+dist/
+*.egg-info/
+# ignore virtual environment directories
+venv/
+ENV/
+env/
+# ignore local settings
+local_settings.py
