@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import subprocess
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
@@ -189,6 +190,8 @@ def llm_make_plan(conversation: list[str], answers: dict):
 # -----------------------------
 if "conversation" not in st.session_state:
     st.session_state["conversation"] = []
+if "messages" not in st.session_state:
+    st.session_state["messages"] = []
 if "answers" not in st.session_state:
     st.session_state["answers"] = {}
 if "llm_out" not in st.session_state:
@@ -222,42 +225,51 @@ with st.sidebar:
 # -----------------------------
 # Chat Input
 # -----------------------------
-st.markdown("### 💬 チャット（最大2問の確認→提案）")
-user_msg = st.text_input("やりたいこと（例：30人でパーティー。ノンアルも混ぜたい。予算は1万円くらい）")
+st.markdown("### 💬 Chat")
 
-colA, colB = st.columns([0.2, 0.8])
-with colA:
-    if st.button("送信", type="primary"):
-        if user_msg.strip():
-            st.session_state["conversation"].append(user_msg.strip())
-            st.session_state["confirmed"] = False
-            st.session_state["llm_out"] = llm_make_plan(st.session_state["conversation"], st.session_state["answers"])
-            st.rerun()
-with colB:
-    if st.button("リセット"):
-        st.session_state["conversation"] = []
-        st.session_state["answers"] = {}
-        st.session_state["llm_out"] = None
-        st.session_state["confirmed"] = False
-        st.rerun()
+# Render chat history
+for m in st.session_state["messages"]:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
 
-# Render last 3 conversation lines (simple)
-if st.session_state["conversation"]:
-    st.markdown("<div class='card'><b>会話（直近）</b><hr>", unsafe_allow_html=True)
-    for line in st.session_state["conversation"][-3:]:
-        st.markdown(f"- {line}")
-    st.markdown("</div>", unsafe_allow_html=True)
+# Input
+prompt = st.chat_input("Tell me what you want (e.g., party for 30, budget 10,000 yen, include non-alcohol options)")
+if prompt:
+    st.session_state["messages"].append({"role": "user", "content": prompt})
+    st.session_state["conversation"].append(prompt)
+    st.session_state["confirmed"] = False
+
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            st.session_state["llm_out"] = llm_make_plan(
+                st.session_state["conversation"],
+                st.session_state["answers"],
+            )
+
+    st.rerun()
 
 # -----------------------------
 # If no LLM output yet, stop here
 # -----------------------------
 out = st.session_state.get("llm_out")
 if not out:
-    st.info("まずは要望を入力して「送信」を押してください。")
+    st.info("Type your request above to start. I’ll ask up to 2 quick questions, then build a bundle.")
     st.stop()
 
 questions = out.get("questions", [])
 plan = out.get("plan", {})
+# One-time: append assistant summary into chat if not already appended
+if "last_plan_hash" not in st.session_state:
+    st.session_state["last_plan_hash"] = None
+
+plan_hash = json.dumps(plan, ensure_ascii=False)
+if plan_hash != st.session_state["last_plan_hash"]:
+    st.session_state["last_plan_hash"] = plan_hash
+    summary = f"**{plan.get('title','')}**\n\n" + "\n".join([f"- {a}" for a in plan.get("assumptions", [])])
+    if plan.get("note"):
+        summary += f"\n\n_{plan['note']}_"
+    st.session_state["messages"].append({"role": "assistant", "content": summary})
+    st.rerun()
 
 # -----------------------------
 # Questions UI (0–2)
@@ -355,9 +367,46 @@ with col2:
     st.caption("※デモではAmazonのみ“まとめてカート投入”を実演（最大5商品）。")
 
 if st.session_state["confirmed"]:
-    cart_url = build_amazon_cart_add_url(bundle_items, max_items=MAX_CART_ITEMS)
-    if cart_url:
-        st.link_button("🛒 Amazonにまとめて追加（デモ）", cart_url)
-        st.caption("同一ブラウザでAmazonにログイン済みだと、カートに反映されやすいです。")
+    asins = []
+    for it in bundle_items[:MAX_CART_ITEMS]:
+        prod = PRODUCT_BY_ID.get(it["asahi_id"])
+        if prod:
+            asin = prod["offers"]["amazon"].get("asin")
+            if asin:
+                asins.append(asin)
+
+    if not asins:
+        st.warning("No Amazon ASINs found in the current bundle.")
     else:
-        st.warning("ASINが不足しているため、Amazonカート投入リンクを生成できません。")
+        colA, colB = st.columns([0.35, 0.65])
+        with colA:
+            if st.button("🛒 Add bundle to Amazon cart (Playwright)", type="primary"):
+                cmd = [
+                    "python",
+                    str(BASE / "amazon_cart_bot.py"),
+                    "--asins",
+                    json.dumps(asins, ensure_ascii=False),
+                    "--profile",
+                    str(BASE / "pw_amazon_profile"),
+                    "--keep_open",
+                ]
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                log_path = BASE / "cart_bot.log"
+                with open(log_path, "a", encoding="utf-8") as f:
+                    subprocess.Popen(cmd, stdout=f, stderr=f)
+                st.success("Started cart prep. If it closes, open cart_bot.log to see why.")
+                st.code(str(log_path))
+
+                # record a state so we can show a “next step” panel
+                st.session_state["cart_started"] = True
+                st.success("Amazon cart prep started in a Chrome window.")
+                st.rerun()
+
+        with colB:
+            st.caption("Demo flow: click → switch to Chrome window → cart is ready → come back here.")
+
+        if st.session_state.get("cart_started"):
+            st.info(
+                "✅ Next step: Switch to the **Chrome window** that opened, confirm items in the **Amazon cart**, "
+                "then come back to this page to continue the conversation."
+            )

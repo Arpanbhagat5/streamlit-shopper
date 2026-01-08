@@ -5,7 +5,8 @@
 .env.*
 # ignore macOS system files
 .DS_Store
-
+# ignore Amazon profile data
+/pw_amazon_profile
 # ignore Python cache files
 __pycache__/
 *.py[cod]
