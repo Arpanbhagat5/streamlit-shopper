@@ -1,0 +1,84 @@
+{
+  "products": [
+    {
+      "asahi_id": "BEER_SUPER_DRY_24",
+      "name_ja": "アサヒ スーパードライ 350ml×24",
+      "tags": ["ビール", "パーティー", "定番", "アルコール"],
+      "offers": {
+        "amazon": { "asin": "B0029ZFYJQ", "url": "https://www.amazon.co.jp/dp/B0029ZFYJQ", "price_jpy": 4765 },
+        "rakuten": { "url": "https://item.rakuten.co.jp/soukaidrink/4901004057051/?variantId=4901004057051", "price_jpy": 4980 },
+        "lohaco": { "url": "https://lohaco.yahoo.co.jp/store/h-lohaco/item/9707682/", "price_jpy": 4980 }
+      }
+    },
+    {
+      "asahi_id": "BEER_MARUEV_6",
+      "name_ja": "アサヒ 生ビール（マルエフ）350ml×6",
+      "tags": ["ビール", "パーティー", "少量", "アルコール"],
+      "offers": {
+        "amazon": { "asin": "B09GS4R4SK", "url": "https://www.amazon.co.jp/dp/B09GS4R4SK", "price_jpy": 1598 },
+        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%83%9E%E3%83%AB%E3%82%A8%E3%83%95%20350ml%206/", "price_jpy": 1598 },
+        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%83%9E%E3%83%AB%E3%82%A8%E3%83%95%20350ml%206", "price_jpy": 1598}
+      }
+    },
+    {
+      "asahi_id": "BEER_SUPER_DRY_6",
+      "name_ja": "アサヒ スーパードライ 350ml×6",
+      "tags": ["ビール", "パーティー", "少量", "アルコール"],
+      "offers": {
+        "amazon": { "asin": "B00H1KI5NQ", "url": "https://www.amazon.co.jp/dp/B00H1KI5NQ", "price_jpy": 1175 },
+        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%82%B9%E3%83%BC%E3%83%91%E3%83%BC%E3%83%89%E3%83%A9%E3%82%A4%20350ml%206/", "price_jpy": 1175 },
+        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%82%B9%E3%83%BC%E3%83%91%E3%83%BC%E3%83%89%E3%83%A9%E3%82%A4%20350ml%206", "price_jpy": 1175}
+      }
+    },
+    {
+      "asahi_id": "NONALC_DRY_ZERO_24",
+      "name_ja": "アサヒ ドライゼロ 350ml×24",
+      "tags": ["ノンアル", "パーティー", "定番"],
+      "offers": {
+        "amazon": { "asin": "B006OHKDW8", "url": "https://www.amazon.co.jp/dp/B006OHKDW8", "price_jpy": 2591 },
+        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%83%89%E3%83%A9%E3%82%A4%E3%82%BC%E3%83%AD%20350ml%2024/", "price_jpy": 2591 },
+        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%83%89%E3%83%A9%E3%82%A4%E3%82%BC%E3%83%AD%20350ml%2024", "price_jpy": 2591}
+      }
+    },
+    {
+      "asahi_id": "AMANO_MISO_VARIETY",
+      "name_ja": "アマノフーズ いつものおみそ汁 バラエティ",
+      "tags": ["アマノフーズ", "味噌汁", "ストック", "簡単"],
+      "offers": {
+        "amazon": { "asin": "B09NQYS7WF", "url": "https://www.amazon.co.jp/dp/B09NQYS7WF" },
+        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%81%84%E3%81%A4%E3%82%82%E3%81%AE%E3%81%8A%E3%81%BF%E3%81%9D%E3%81%97%E3%82%8B/" },
+        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%81%84%E3%81%A4%E3%82%82%E3%81%AE%E3%81%8A%E3%81%BF%E3%81%9D%E3%81%97%E3%82%8B" }
+      }
+    },
+    {
+      "asahi_id": "AMANO_CURRY_CHICKEN",
+      "name_ja": "アマノフーズ 野菜と鶏肉のカレー",
+      "tags": ["アマノフーズ", "カレー", "ストック", "簡単"],
+      "offers": {
+        "amazon": { "asin": "B09HHCLVZ3", "url": "https://www.amazon.co.jp/dp/B09HHCLVZ3" },
+        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E9%B6%8F%E8%82%89%20%E3%82%AB%E3%83%AC%E3%83%BC/" },
+        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E9%B6%8F%E8%82%89%20%E3%82%AB%E3%83%AC%E3%83%BC" }
+      }
+    },
+    {
+      "asahi_id": "AMANO_CURRY_VARIETY",
+      "name_ja": "アマノフーズ カレー 4種アソート",
+      "tags": ["アマノフーズ", "カレー", "バラエティ", "ストック"],
+      "offers": {
+        "amazon": { "asin": "B09HHF886J", "url": "https://www.amazon.co.jp/dp/B09HHF886J" },
+        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E3%82%AB%E3%83%AC%E3%83%BC%20%E3%82%A2%E3%82%BD%E3%83%BC%E3%83%88/" },
+        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E3%82%AB%E3%83%AC%E3%83%BC%20%E3%82%A2%E3%82%BD%E3%83%BC%E3%83%88" }
+      }
+    },
+    {
+      "asahi_id": "AMANO_EGG_SOUP",
+      "name_ja": "アマノフーズ たまごスープ",
+      "tags": ["アマノフーズ", "スープ", "簡単", "ストック"],
+      "offers": {
+        "amazon": { "asin": "B0753XS44S", "url": "https://www.amazon.co.jp/dp/B0753XS44S" },
+        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E3%81%9F%E3%81%BE%E3%81%94%E3%82%B9%E3%83%BC%E3%83%97/" },
+        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E3%81%9F%E3%81%BE%E3%81%94%E3%82%B9%E3%83%BC%E3%83%97" }
+      }
+    }
+  ]
+}

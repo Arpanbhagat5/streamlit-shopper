@@ -1,358 +1,363 @@
-
 import json
-from datetime import datetime, timedelta
+import os
+import random
+import urllib.parse
+from datetime import datetime
 from pathlib import Path
+
 import streamlit as st
+import streamlit.components.v1 as components
+from openai import OpenAI
+
+
+# -----------------------------
+# Config
+# -----------------------------
+client = OpenAI()
+BASE = Path(__file__).resolve().parent
+CATALOG_PATH = BASE / "asahi_catalog.json"
+
+SELLER_OFFSETS = {"amazon": 1.00, "rakuten": 1.05, "lohaco": 1.03}
+MAX_CART_ITEMS = 5
 
 st.set_page_config(page_title="Asahi Group AIショッパー（デモ）", page_icon="🛒", layout="wide")
 
-# ---------- Styling ----------
 st.markdown("""
 <style>
-.stApp {
-  background: radial-gradient(1200px 600px at 10% 10%, rgba(255, 60, 60, 0.12), transparent 60%),
-              radial-gradient(1200px 600px at 90% 20%, rgba(0, 160, 255, 0.10), transparent 60%),
-              linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(250,250,252,1) 100%);
-}
-.header {
-  padding: 18px 18px 10px 18px;
-  border-radius: 18px;
-  background: linear-gradient(90deg, rgba(10,10,12,1), rgba(28,28,34,1));
-  color: white;
-  box-shadow: 0 10px 24px rgba(0,0,0,0.12);
-}
-.header h1 { margin: 0; font-size: 26px; letter-spacing: 0.2px;}
-.header p { margin: 6px 0 0 0; opacity: .85; font-size: 14px;}
-.chip {
-  display: inline-block;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(0,0,0,0.06);
-  margin-right: 6px;
-  margin-bottom: 6px;
-  font-size: 12px;
-}
-.card {
-  border-radius: 18px;
-  border: 1px solid rgba(0,0,0,0.06);
-  background: rgba(255,255,255,0.92);
-  box-shadow: 0 10px 18px rgba(0,0,0,0.06);
-  padding: 14px;
-}
-.subtle {
-  color: rgba(0,0,0,0.62);
-  font-size: 12px;
-}
-.kpi {
-  border-radius: 14px;
-  padding: 10px 12px;
-  background: rgba(0,0,0,0.035);
-  border: 1px solid rgba(0,0,0,0.05);
-}
-.sticky {
-  position: sticky;
-  bottom: 12px;
-  z-index: 999;
-  border-radius: 18px;
-  padding: 14px 16px;
-  background: rgba(255,255,255,0.94);
-  border: 1px solid rgba(0,0,0,0.08);
-  box-shadow: 0 16px 30px rgba(0,0,0,0.12);
-}
+.stApp { background: light blue; }
+.card { border: 1px solid rgba(0,0,0,0.08); border-radius: 14px; padding: 12px; background: grey; }
+.badge { display:inline-block; padding:3px 8px; border-radius:999px; border:1px solid rgba(0,0,0,0.12); margin-right:6px; font-size:12px;}
+.badge-amz { background: rgba(255, 153, 0, 0.15); }
+.badge-rak { background: rgba(191, 0, 0, 0.10); }
+.badge-loh { background: rgba(0, 120, 255, 0.10); }
+.small { color: rgba(0,0,0,0.65); font-size: 13px; }
+hr { border: none; border-top: 1px solid rgba(0,0,0,0.08); margin: 10px 0; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- Header ----------
-st.markdown("""
-<div class="header">
-  <h1>Asahi Group AIショッパー（デモ）</h1>
-  <p>Amazon（または将来のAsahi EC）で「探す→選ぶ→まとめる」を一瞬で。</p>
-</div>
-""", unsafe_allow_html=True)
+st.markdown("## Asahi Group AIショッパー（デモ）")
+st.caption("Asahi商品を提案 → 外部EC（Amazon / Rakuten / LOHACO）へ送客する想定のデモ")
 
-# ---------- Load snapshot ----------
-BASE = Path(__file__).resolve().parent
-SNAPSHOT_PATH = BASE / "products_snapshot.json"
-
+# -----------------------------
+# Data
+# -----------------------------
 @st.cache_data
-def load_products():
-    with open(SNAPSHOT_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+def load_catalog():
+    return json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
 
-PRODUCTS = load_products()
+CATALOG = load_catalog()
+PRODUCTS = CATALOG["products"]
+PRODUCT_BY_ID = {p["asahi_id"]: p for p in PRODUCTS}
+ASAHI_IDS = list(PRODUCT_BY_ID.keys())
 
-# ---------- Helpers ----------
 def yen(x: int) -> str:
     return f"¥{x:,}"
 
-def rank_items(items, prefer_prime=True, max_items=6):
-    items_sorted = sorted(
-        items,
-        key=lambda it: (
-            0 if (it.get("prime") and prefer_prime) else 1,
-            it.get("delivery_days", 99),
-            -float(it.get("rating", 0)),
-            int(it.get("price_jpy", 10**9)),
-        )
-    )
-    return items_sorted[:max_items]
+def stable_base_price(asahi_id: str) -> int:
+    random.seed(asahi_id)
+    return random.choice([980, 1180, 1280, 1680, 1980, 2480, 2980, 3580, 3980, 4280, 4980])
 
-def filter_products(category=None, must_tags=None, price_max=None):
-    out = PRODUCTS
-    if category:
-        out = [p for p in out if p["category"] == category]
-    if must_tags:
-        for t in must_tags:
-            out = [p for p in out if (t in p.get("tags", [])) or (t in p.get("title",""))]
-    if price_max is not None:
-        out = [p for p in out if p.get("price_jpy", 10**9) <= price_max]
-    return out
+def offer_price(product: dict, seller: str) -> int:
+    # 1) if catalog has price, use it (best for video demo)
+    p = product["offers"].get(seller, {}).get("price_jpy")
+    if isinstance(p, int) and p > 0:
+        return p
 
-def detect_intent(text: str) -> str:
-    t = text.lower()
-    if ("パーティ" in text) or ("party" in t) or ("30" in text) or ("ビール" in text):
-        return "party"
-    if ("セーター" in text) or ("sweater" in t) or ("赤" in text):
-        return "sweater"
-    if ("自転車" in text) or ("bike" in t) or ("娘" in text) or ("4歳" in text):
-        return "kids_bike"
-    return "unknown"
+    # 2) else derive from amazon price if present
+    base = product["offers"].get("amazon", {}).get("price_jpy")
+    if isinstance(base, int) and base > 0:
+        return int(base * SELLER_OFFSETS[seller])
 
-def make_plan(intent: str, text: str, height_cm: int|None = None):
-    now = datetime.now()
-    if intent == "party":
-        people = 30
-        beers_per_person = 2
-        cans = people * beers_per_person
-        plan = {
-            "title": "パーティー準備（30人想定）",
-            "assumptions": [
-                f"人数: {people}人",
-                f"飲み物: 1人あたり{beers_per_person}本（合計{cans}本）",
-                "スナックは“甘い/しょっぱい”のミックス",
-                "紙皿・紙コップ・割り箸・ウェットティッシュを同梱",
-            ],
-            "bundle": [
-                {"section": "ビール/飲料", "category": "beer", "qty_hint": f"合計{cans}本（例: 24本×2 + 12本など）"},
-                {"section": "おつまみ/スナック", "category": "snack", "qty_hint": "大袋/まとめ買いで時短"},
-                {"section": "備品（紙コップ/紙皿/割り箸等）", "category": "party", "qty_hint": "不足しがちな消耗品を一括"},
-            ],
-            "order_by": (now + timedelta(days=0)).strftime("%Y/%m/%d 18:00"),
-            "note": "※お届け日は商品ページで最終確認してください。",
-        }
-        return plan, None
+    # 3) else fallback mock
+    return int(stable_base_price(product["asahi_id"]) * SELLER_OFFSETS[seller])
 
-    if intent == "sweater":
-        plan = {
-            "title": "メンズ赤セーター（予算：¥4,000以下）",
-            "assumptions": [
-                "カラー: 赤",
-                "性別: メンズ",
-                "価格上限: ¥4,000",
-                "まずは“首元（クルー/タートル）”と“素材感”で絞り込み",
-            ],
-            "bundle": [
-                {"section": "候補一覧", "category": "apparel", "qty_hint": "好みの素材/首元で選択"},
-            ],
-            "order_by": (now + timedelta(days=0)).strftime("%Y/%m/%d 18:00"),
-            "note": "※サイズ感はレビューを優先して確認してください。",
-        }
-        return plan, None
+def build_amazon_cart_add_url(plan_items: list[dict], max_items: int = MAX_CART_ITEMS) -> str | None:
+    base = "https://www.amazon.co.jp/gp/aws/cart/add.html"
+    params = {}
+    i = 1
+    for it in plan_items:
+        pid = it["asahi_id"]
+        qty = int(it.get("qty", 1))
+        prod = PRODUCT_BY_ID.get(pid)
+        if not prod:
+            continue
+        asin = prod["offers"]["amazon"].get("asin")
+        if not asin:
+            continue
+        params[f"ASIN.{i}"] = asin
+        params[f"Quantity.{i}"] = str(qty)
+        i += 1
+        if i > max_items:
+            break
+    if i == 1:
+        return None
+    return base + "?" + urllib.parse.urlencode(params)
 
-    if intent == "kids_bike":
-        if height_cm is None:
-            follow = {
-                "question": "娘さんの身長は何cmくらいですか？（目安でOK）",
-                "hint": "かわいいですね😊 身長に合うインチを絞ると失敗しにくいです。",
-            }
-            return None, follow
+# compact catalog grounding (small list)
+CATALOG_LINES = []
+for p in PRODUCTS:
+    CATALOG_LINES.append(f'{p["asahi_id"]}: {p["name_ja"]} / tags={",".join(p.get("tags", []))}')
+CATALOG_GROUNDING = "\n".join(CATALOG_LINES)
 
-        if height_cm < 95:
-            inch = "12インチ（キックバイク）"
-            tags = ["12インチ"]
-        elif height_cm < 110:
-            inch = "14インチ"
-            tags = ["14インチ"]
-        elif height_cm < 120:
-            inch = "16インチ"
-            tags = ["16インチ"]
-        else:
-            inch = "18インチ"
-            tags = ["18インチ"]
+# -----------------------------
+# LLM Schema (strict)
+# -----------------------------
+QUESTION_ID_ENUM = ["budget_jpy", "delivery_by", "alcohol_ratio", "days_count", "focus"]  # keep simple
 
-        plan = {
-            "title": "4歳向け 自転車選び（身長ベース）",
-            "assumptions": [
-                f"身長: {height_cm}cm",
-                f"おすすめサイズ: {inch}",
-                "安全のためヘルメット/プロテクターも同時提案",
-                "補助輪付き or キックバイクを優先",
-            ],
-            "bundle": [
-                {"section": "自転車本体（候補）", "category": "bike", "qty_hint": inch, "must_tags": tags},
-                {"section": "ヘルメット", "category": "bike_accessory", "qty_hint": "Sサイズ目安", "must_tags": ["ヘルメット"]},
-                {"section": "プロテクター/安全小物", "category": "bike_accessory", "qty_hint": "ケガ予防", "must_tags": ["プロテクター"]},
-            ],
-            "order_by": (now + timedelta(days=0)).strftime("%Y/%m/%d 18:00"),
-            "note": "※適合サイズはメーカー表もご確認ください。",
-        }
-        return plan, None
-
-    plan = {
-        "title": "もう少し情報が欲しいです",
-        "assumptions": [
-            "例：予算、期限、サイズ、用途などを追記してください。",
-            "（デモでは左の例ボタンを押すと確実に動きます）",
-        ],
-        "bundle": [],
-        "order_by": (now + timedelta(days=0)).strftime("%Y/%m/%d 18:00"),
-        "note": "",
+PLAN_SCHEMA = {
+  "type": "object",
+  "properties": {
+    "questions": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "enum": QUESTION_ID_ENUM},
+          "question": {"type": "string", "maxLength": 140},
+          "type": {"type": "string", "enum": ["choice", "number", "date"]},
+          "options": {"type": "array", "items": {"type": "string", "maxLength": 40}, "maxItems": 8},
+          "default": {"type": ["string","integer","null"]}
+        },
+        "required": ["id","question","type","options","default"],
+        "additionalProperties": False
+      }
+    },
+    "plan": {
+      "type": "object",
+      "properties": {
+        "title": {"type": "string", "maxLength": 80},
+        "assumptions": {"type": "array", "items": {"type": "string", "maxLength": 160}, "maxItems": 10},
+        "bundle_items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "properties": {
+              "asahi_id": {"type": "string", "enum": ASAHI_IDS},
+              "qty": {"type": "integer", "minimum": 1, "maximum": 20},
+              "seller_preference": {"type": "string", "enum": ["amazon", "rakuten", "lohaco", "any"]},
+              "reason": {"type": "string", "maxLength": 120}
+            },
+            "required": ["asahi_id","qty","seller_preference","reason"],
+            "additionalProperties": False
+          }
+        },
+        "note": {"type": "string", "maxLength": 220}
+      },
+      "required": ["title","assumptions","bundle_items","note"],
+      "additionalProperties": False
     }
-    return plan, None
+  },
+  "required": ["questions","plan"],
+  "additionalProperties": False
+}
 
-def render_plan(plan: dict):
-    st.markdown(f"<div class='card'><b>🧠 AIプラン</b><br><span class='subtle'>{plan.get('title','')}</span><hr>", unsafe_allow_html=True)
-    for a in plan.get("assumptions", []):
-        st.markdown(f"- {a}")
-    st.markdown(f"<div class='subtle'>注文目安: {plan.get('order_by','')}<br>{plan.get('note','')}</div></div>", unsafe_allow_html=True)
+SYSTEM_PROMPT = f"""
+あなたはAsahi Groupの“商品提案”アシスタント。Asahiは自社ECではなく、購入は外部EC（Amazon/Rakuten/LOHACO）に送客する想定。
 
-def render_items_grid(items, cols=3, pick_state_key=None):
-    if not items:
-        st.info("該当候補が見つかりませんでした（スナップショット範囲外）")
-        return
-    rows = (len(items) + cols - 1) // cols
-    idx = 0
-    for _ in range(rows):
-        cs = st.columns(cols)
-        for c in cs:
-            if idx >= len(items):
-                break
-            it = items[idx]
-            idx += 1
-            with c:
-                img = Path(it["image"])
+目的：手動検索より速く、買い忘れなく、数量まで具体化して提案する。
 
-                # If it's relative, resolve it under the app folder
-                if not img.is_absolute():
-                    img = (BASE / img)
+- 質問は最大2つ。結果が大きく変わる時だけ質問する。
+- 質問しない場合は妥当なデフォルトで進め、assumptionsに明記する。
+- bundle_items は必ず1つ以上。数量 qty も必須。
+- 選べる商品は asahi_id の一覧のみ。それ以外は絶対に出さない。
+- party の場合は「人数→本数の計算式」を assumptions に1行含める（例：30人×2本=60本）。
+- お酒が含まれる場合、note に「飲酒は20歳以上」を一言入れる。
+"""
 
-                # If it's an old absolute path that doesn't exist on this machine,
-                # fall back to snapshot_images/<filename>
-                if not img.exists():
-                    img = BASE / "snapshot_images" / Path(it["image"]).name
+def llm_make_plan(conversation: list[str], answers: dict):
+    payload = {
+        "conversation": conversation,
+        "answers": answers
+    }
+    resp = client.responses.create(
+        model=os.getenv("OPENAI_MODEL", "gpt-4o-2024-08-06"),
+        input=[
+            {"role": "system", "content": SYSTEM_PROMPT.strip()},
+            {"role": "system", "content": "利用可能な商品一覧（asahi_id）:\n" + CATALOG_GROUNDING},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}
+        ],
+        text={"format": {"type": "json_schema", "name": "asahi_plan", "schema": PLAN_SCHEMA, "strict": True}},
+        temperature=0.2,
+    )
+    return json.loads(resp.output_text)
 
-                st.image(str(img), use_container_width=True)
-                st.markdown(f"**{it['title']}**")
-                chips = []
-                if it.get("prime"): chips.append("Prime")
-                chips.append(f"{it.get('delivery_days','-')}日以内")
-                if it.get("deal"): chips.append("お得")
-                for ch in chips[:3]:
-                    st.markdown(f"<span class='chip'>{ch}</span>", unsafe_allow_html=True)
-                st.markdown(f"### {yen(int(it['price_jpy']))}")
-                st.caption(f"⭐ {it.get('rating')}（{it.get('reviews'):,}件）")
-                if pick_state_key:
-                    if st.button("バンドルに追加", key=f"add_{pick_state_key}_{it['id']}"):
-                        st.session_state[pick_state_key].append(it["id"])
+# -----------------------------
+# Session State
+# -----------------------------
+if "conversation" not in st.session_state:
+    st.session_state["conversation"] = []
+if "answers" not in st.session_state:
+    st.session_state["answers"] = {}
+if "llm_out" not in st.session_state:
+    st.session_state["llm_out"] = None
+if "confirmed" not in st.session_state:
+    st.session_state["confirmed"] = False
 
-# ---------- Sidebar ----------
+# -----------------------------
+# Sidebar (examples + debug)
+# -----------------------------
 with st.sidebar:
-    st.markdown("### ⚙️ デモ設定")
-    mode = st.selectbox("データ取得", ["スナップショット（推奨）", "Amazon PA-API（将来）"])
-    st.markdown("""
-- これは **録画デモ向け** のUIです。  
-- Amazon PA-API は鍵が揃えば差し替えできます（本サンプルは未実装）。
-""")
     st.markdown("### 🎬 例（ワンクリック）")
     if st.button("例：30人パーティー"):
-        st.session_state["intent_text"] = "30人でパーティーをします。ビールなどはOK。"
-    if st.button("例：赤いセーター"):
-        st.session_state["intent_text"] = "男性向けで赤いセーター、4000円以下で探して。"
-    if st.button("例：4歳の娘に自転車"):
-        st.session_state["intent_text"] = "4歳の娘に自転車を買いたいです。"
+        st.session_state["conversation"] = ["30人でパーティーをします。ビールなどはOK。予算と到着日も考慮して提案して。"]
+        st.session_state["answers"] = {}
+        st.session_state["llm_out"] = None
+        st.session_state["confirmed"] = False
+        st.rerun()
 
-# ---------- Main ----------
-st.markdown("## 🧾 やりたいことを入力")
-intent_text = st.text_input("例）30人でパーティー。ビールOK / メンズ赤セーター4000円以下 / 4歳の娘に自転車", key="intent_text")
-go = st.button("提案を見る", type="primary")
+    if st.button("例：アマノフーズのストック"):
+        st.session_state["conversation"] = ["アマノフーズで平日ランチのストックをしたい。買い忘れない組み合わせで提案して。"]
+        st.session_state["answers"] = {}
+        st.session_state["llm_out"] = None
+        st.session_state["confirmed"] = False
+        st.rerun()
 
-if "bundle_ids" not in st.session_state:
-    st.session_state["bundle_ids"] = []
+    st.divider()
+    if st.checkbox("DEBUG: LLM JSONを表示"):
+        st.json(st.session_state.get("llm_out"))
 
-if go and intent_text.strip():
-    st.session_state["bundle_ids"] = []
-    st.session_state["last_intent"] = detect_intent(intent_text)
-    st.session_state["height_cm"] = None
+# -----------------------------
+# Chat Input
+# -----------------------------
+st.markdown("### 💬 チャット（最大2問の確認→提案）")
+user_msg = st.text_input("やりたいこと（例：30人でパーティー。ノンアルも混ぜたい。予算は1万円くらい）")
 
-intent = st.session_state.get("last_intent")
-height_cm = st.session_state.get("height_cm")
+colA, colB = st.columns([0.2, 0.8])
+with colA:
+    if st.button("送信", type="primary"):
+        if user_msg.strip():
+            st.session_state["conversation"].append(user_msg.strip())
+            st.session_state["confirmed"] = False
+            st.session_state["llm_out"] = llm_make_plan(st.session_state["conversation"], st.session_state["answers"])
+            st.rerun()
+with colB:
+    if st.button("リセット"):
+        st.session_state["conversation"] = []
+        st.session_state["answers"] = {}
+        st.session_state["llm_out"] = None
+        st.session_state["confirmed"] = False
+        st.rerun()
 
-if intent:
-    plan, follow = make_plan(intent, intent_text, height_cm=height_cm)
+# Render last 3 conversation lines (simple)
+if st.session_state["conversation"]:
+    st.markdown("<div class='card'><b>会話（直近）</b><hr>", unsafe_allow_html=True)
+    for line in st.session_state["conversation"][-3:]:
+        st.markdown(f"- {line}")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    if follow:
-        st.markdown("### 💬 追加で1つだけ質問")
-        st.info(follow["hint"])
-        h = st.slider(follow["question"], min_value=85, max_value=130, value=105, step=1)
-        if st.button("この条件で探す", type="primary"):
-            st.session_state["height_cm"] = h
-            plan, follow = make_plan(intent, intent_text, height_cm=h)
+# -----------------------------
+# If no LLM output yet, stop here
+# -----------------------------
+out = st.session_state.get("llm_out")
+if not out:
+    st.info("まずは要望を入力して「送信」を押してください。")
+    st.stop()
 
-    if plan:
-        left, right = st.columns([0.38, 0.62], gap="large")
-        with left:
-            render_plan(plan)
-            st.markdown("#### ✅ この提案のポイント")
-            st.markdown("""
-<div class="kpi"><b>質問は最大1回</b><br><span class="subtle">“会話の摩擦”を最小化して、すぐカード表示。</span></div>
-<div style="height:10px"></div>
-<div class="kpi"><b>バンドルで購入を短縮</b><br><span class="subtle">必要量・関連商品・お得条件をまとめて提案。</span></div>
-<div style="height:10px"></div>
-<div class="kpi"><b>根拠を見せる</b><br><span class="subtle">数量の前提や選定ロジックをUIに明示。</span></div>
-""", unsafe_allow_html=True)
+questions = out.get("questions", [])
+plan = out.get("plan", {})
 
-        with right:
-            st.markdown("### 🛍️ おすすめ商品")
-            for b in plan.get("bundle", []):
-                section = b.get("section","")
-                category = b.get("category")
-                must_tags = b.get("must_tags")
-                st.markdown(f"#### {section}  <span class='subtle'>— {b.get('qty_hint','')}</span>", unsafe_allow_html=True)
+# -----------------------------
+# Questions UI (0–2)
+# -----------------------------
+if questions and not st.session_state["confirmed"]:
+    st.markdown("### ❓ 追加で確認（最大2つ）")
+    new_answers = dict(st.session_state["answers"])
 
-                if mode.startswith("スナップショット"):
-                    items = filter_products(category=category, must_tags=must_tags,
-                                           price_max=4000 if intent=="sweater" else None)
-                    items = rank_items(items, prefer_prime=True, max_items=6)
-                else:
-                    st.warning("Amazon PA-API モードは未実装です。スナップショットをご利用ください。")
-                    items = []
-                render_items_grid(items, cols=3, pick_state_key="bundle_ids")
-                st.divider()
+    for q in questions:
+        qid = q["id"]
+        label = q["question"]
+        qtype = q["type"]
+        opts = q.get("options", [])
+        default = q.get("default")
 
-        picked = st.session_state.get("bundle_ids", [])
-        picked_items = [p for p in PRODUCTS if p["id"] in picked]
-        total = sum(int(p["price_jpy"]) for p in picked_items) if picked_items else 0
-        min_delivery = min([p.get("delivery_days", 99) for p in picked_items], default=None)
+        if qtype == "choice":
+            if default is None and opts:
+                default = opts[0]
+            val = st.selectbox(label, options=opts, index=(opts.index(default) if default in opts else 0), key=f"q_{qid}")
+            new_answers[qid] = val
 
-        st.markdown("---")
-        st.markdown("<div class='sticky'>", unsafe_allow_html=True)
-        st.markdown(
-            f"**🧺 バンドル合計:** {yen(total)}　"
-            f"**追加点数:** {len(picked_items)}　"
-            f"**最短お届け:** {str(min_delivery)+'日以内' if min_delivery else '—'}",
-            unsafe_allow_html=True
-        )
-        st.markdown("<div class='subtle'>※価格/在庫/配送条件は購入時に変動する場合があります。最終情報は商品ページでご確認ください。</div>", unsafe_allow_html=True)
+        elif qtype == "number":
+            dv = int(default) if isinstance(default, int) else 0
+            val = st.number_input(label, min_value=0, value=dv, step=100, key=f"q_{qid}")
+            new_answers[qid] = int(val)
 
-        c1, c2, c3 = st.columns([0.5, 0.25, 0.25])
-        with c1:
-            st.caption("録画デモでは、ここをクリックして“Amazonで確認”に遷移する演出ができます。")
-        with c2:
-            if st.button("バンドルをクリア"):
-                st.session_state["bundle_ids"] = []
-                st.rerun()
-        with c3:
-            st.link_button("Amazonで確認（デモ）", "https://www.amazon.co.jp/")
-        st.markdown("</div>", unsafe_allow_html=True)
-else:
-    st.caption("左のサイドバーから例を選ぶか、上の入力欄に日本語で目的を書いてください。")
+        elif qtype == "date":
+            # store as ISO string
+            today = datetime.now().date()
+            val = st.date_input(label, value=today, key=f"q_{qid}")
+            new_answers[qid] = str(val)
+
+    if st.button("この条件で提案を更新", type="primary"):
+        st.session_state["answers"] = new_answers
+        st.session_state["llm_out"] = llm_make_plan(st.session_state["conversation"], st.session_state["answers"])
+        st.rerun()
+
+# -----------------------------
+# Plan + Bundle Cards
+# -----------------------------
+st.markdown("### 🧠 提案プラン")
+st.markdown(f"<div class='card'><b>{plan.get('title','')}</b><hr>", unsafe_allow_html=True)
+for a in plan.get("assumptions", []):
+    st.markdown(f"- {a}")
+st.markdown(f"<div class='small'>{plan.get('note','')}</div></div>", unsafe_allow_html=True)
+
+bundle_items = plan.get("bundle_items", [])
+
+st.markdown("### 🛍️ バンドル（外部ECへ送客）")
+for bi in bundle_items:
+    prod = PRODUCT_BY_ID[bi["asahi_id"]]
+    qty = int(bi["qty"])
+    reason = bi.get("reason", "")
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown(f"**{prod['name_ja']}**  × {qty}")
+    if reason:
+        st.markdown(f"<div class='small'>理由: {reason}</div>", unsafe_allow_html=True)
+
+    # seller offers with mocked prices
+    amz_p = offer_price(prod, "amazon")
+    rak_p = offer_price(prod, "rakuten")
+    loh_p = offer_price(prod, "lohaco")
+
+    amz = prod["offers"]["amazon"]["url"]
+    rak = prod["offers"]["rakuten"]["url"]
+    loh = prod["offers"]["lohaco"]["url"]
+
+    st.markdown(
+        f"<span class='badge badge-amz'>Amazon</span> {yen(amz_p)}  ｜ "
+        f"<span class='badge badge-rak'>Rakuten</span> {yen(rak_p)}  ｜ "
+        f"<span class='badge badge-loh'>LOHACO</span> {yen(loh_p)}",
+        unsafe_allow_html=True
+    )
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.link_button("Amazonで見る", amz)
+    with c2:
+        st.link_button("Rakutenで見る", rak)
+    with c3:
+        st.link_button("LOHACOで見る", loh)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# -----------------------------
+# Confirm + Amazon Cart Add (demo)
+# -----------------------------
+st.markdown("---")
+col1, col2 = st.columns([0.5, 0.5])
+with col1:
+    if st.button("✅ このプランで確定（デモ）", type="primary"):
+        st.session_state["confirmed"] = True
+        st.success("確定しました。Amazonまとめて追加（デモ）を有効化しました。")
+with col2:
+    st.caption("※デモではAmazonのみ“まとめてカート投入”を実演（最大5商品）。")
+
+if st.session_state["confirmed"]:
+    cart_url = build_amazon_cart_add_url(bundle_items, max_items=MAX_CART_ITEMS)
+    if cart_url:
+        st.link_button("🛒 Amazonにまとめて追加（デモ）", cart_url)
+        st.caption("同一ブラウザでAmazonにログイン済みだと、カートに反映されやすいです。")
+    else:
+        st.warning("ASINが不足しているため、Amazonカート投入リンクを生成できません。")
