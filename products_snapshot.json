@@ -1,0 +1,460 @@
+[
+  {
+    "id": "p101",
+    "category": "beer",
+    "title": "国産ラガー 350ml×24本",
+    "price_jpy": 3580,
+    "prime": true,
+    "delivery_days": 2,
+    "rating": 4.1,
+    "reviews": 9182,
+    "deal": false,
+    "tags": [
+      "パーティー",
+      "まとめ買い",
+      "アルコール"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p101.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p102",
+    "category": "beer",
+    "title": "クラフトIPA 350ml×24本",
+    "price_jpy": 4280,
+    "prime": true,
+    "delivery_days": 3,
+    "rating": 4.2,
+    "reviews": 2012,
+    "deal": false,
+    "tags": [
+      "パーティー",
+      "まとめ買い",
+      "アルコール"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p102.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p103",
+    "category": "beer",
+    "title": "ノンアルビール 350ml×24本",
+    "price_jpy": 2980,
+    "prime": true,
+    "delivery_days": 2,
+    "rating": 4.2,
+    "reviews": 9086,
+    "deal": true,
+    "tags": [
+      "パーティー",
+      "まとめ買い",
+      "ノンアル"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p103.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p104",
+    "category": "beer",
+    "title": "ハイボール 350ml×24本",
+    "price_jpy": 3780,
+    "prime": false,
+    "delivery_days": 3,
+    "rating": 4.0,
+    "reviews": 13783,
+    "deal": false,
+    "tags": [
+      "パーティー",
+      "まとめ買い",
+      "アルコール"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p104.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p105",
+    "category": "snack",
+    "title": "おつまみミックスナッツ 1kg",
+    "price_jpy": 1680,
+    "prime": true,
+    "delivery_days": 2,
+    "rating": 4.4,
+    "reviews": 15356,
+    "deal": false,
+    "tags": [
+      "パーティー",
+      "おつまみ"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p105.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p106",
+    "category": "snack",
+    "title": "ポテトチップス 大袋×12",
+    "price_jpy": 2480,
+    "prime": true,
+    "delivery_days": 2,
+    "rating": 3.8,
+    "reviews": 18140,
+    "deal": true,
+    "tags": [
+      "パーティー",
+      "スナック"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p106.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p107",
+    "category": "snack",
+    "title": "枝豆スナック 50袋セット",
+    "price_jpy": 1980,
+    "prime": false,
+    "delivery_days": 3,
+    "rating": 4.1,
+    "reviews": 8098,
+    "deal": false,
+    "tags": [
+      "パーティー",
+      "スナック"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p107.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p108",
+    "category": "party",
+    "title": "紙コップ 250ml 100個",
+    "price_jpy": 980,
+    "prime": true,
+    "delivery_days": 1,
+    "rating": 4.3,
+    "reviews": 11081,
+    "deal": false,
+    "tags": [
+      "備品",
+      "まとめ買い"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p108.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p109",
+    "category": "party",
+    "title": "紙皿 23cm 50枚",
+    "price_jpy": 1080,
+    "prime": true,
+    "delivery_days": 1,
+    "rating": 3.8,
+    "reviews": 4066,
+    "deal": true,
+    "tags": [
+      "備品",
+      "まとめ買い"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p109.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p110",
+    "category": "party",
+    "title": "割り箸 100膳",
+    "price_jpy": 780,
+    "prime": true,
+    "delivery_days": 1,
+    "rating": 4.0,
+    "reviews": 5318,
+    "deal": false,
+    "tags": [
+      "備品",
+      "まとめ買い"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p110.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p111",
+    "category": "party",
+    "title": "ウェットティッシュ 10個",
+    "price_jpy": 980,
+    "prime": true,
+    "delivery_days": 1,
+    "rating": 3.9,
+    "reviews": 11990,
+    "deal": false,
+    "tags": [
+      "備品"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p111.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p112",
+    "category": "party",
+    "title": "保冷バッグ 大容量",
+    "price_jpy": 1680,
+    "prime": false,
+    "delivery_days": 3,
+    "rating": 4.4,
+    "reviews": 18248,
+    "deal": true,
+    "tags": [
+      "備品",
+      "保冷"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p112.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p201",
+    "category": "apparel",
+    "title": "メンズ 赤 ニット セーター クルーネック",
+    "price_jpy": 3537,
+    "prime": true,
+    "delivery_days": 1,
+    "rating": 3.9,
+    "reviews": 8458,
+    "deal": false,
+    "tags": [
+      "メンズ",
+      "赤",
+      "冬"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p201.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p202",
+    "category": "apparel",
+    "title": "メンズ 赤 カーディガン コットン",
+    "price_jpy": 3738,
+    "prime": false,
+    "delivery_days": 4,
+    "rating": 4.0,
+    "reviews": 9491,
+    "deal": true,
+    "tags": [
+      "メンズ",
+      "赤",
+      "冬"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p202.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p203",
+    "category": "apparel",
+    "title": "メンズ 赤 タートルネック セーター",
+    "price_jpy": 2177,
+    "prime": false,
+    "delivery_days": 2,
+    "rating": 4.6,
+    "reviews": 13402,
+    "deal": false,
+    "tags": [
+      "メンズ",
+      "赤",
+      "冬"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p203.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p204",
+    "category": "apparel",
+    "title": "メンズ 赤 スウェット (薄手)",
+    "price_jpy": 3899,
+    "prime": true,
+    "delivery_days": 1,
+    "rating": 3.8,
+    "reviews": 18083,
+    "deal": true,
+    "tags": [
+      "メンズ",
+      "赤",
+      "冬"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p204.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p205",
+    "category": "apparel",
+    "title": "メンズ 赤 フリース トップス",
+    "price_jpy": 3325,
+    "prime": false,
+    "delivery_days": 3,
+    "rating": 4.4,
+    "reviews": 2069,
+    "deal": false,
+    "tags": [
+      "メンズ",
+      "赤",
+      "冬"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p205.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p206",
+    "category": "apparel",
+    "title": "メンズ 赤 ニット (洗える)",
+    "price_jpy": 2605,
+    "prime": false,
+    "delivery_days": 2,
+    "rating": 4.1,
+    "reviews": 6309,
+    "deal": true,
+    "tags": [
+      "メンズ",
+      "赤",
+      "冬"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p206.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p301",
+    "category": "bike",
+    "title": "キッズ自転車 14インチ 補助輪付き",
+    "price_jpy": 14800,
+    "prime": true,
+    "delivery_days": 3,
+    "rating": 4.1,
+    "reviews": 16551,
+    "deal": false,
+    "tags": [
+      "キッズ",
+      "安全",
+      "14インチ"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p301.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p302",
+    "category": "bike",
+    "title": "キッズ自転車 16インチ 補助輪付き",
+    "price_jpy": 16800,
+    "prime": true,
+    "delivery_days": 4,
+    "rating": 3.9,
+    "reviews": 7939,
+    "deal": false,
+    "tags": [
+      "キッズ",
+      "安全",
+      "16インチ"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p302.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p303",
+    "category": "bike",
+    "title": "キッズ自転車 18インチ 補助輪付き",
+    "price_jpy": 19800,
+    "prime": false,
+    "delivery_days": 5,
+    "rating": 4.4,
+    "reviews": 5468,
+    "deal": false,
+    "tags": [
+      "キッズ",
+      "安全",
+      "18インチ"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p303.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p304",
+    "category": "bike",
+    "title": "キックバイク 12インチ (バランスバイク)",
+    "price_jpy": 8900,
+    "prime": true,
+    "delivery_days": 2,
+    "rating": 4.7,
+    "reviews": 15668,
+    "deal": true,
+    "tags": [
+      "キッズ",
+      "安全",
+      "12インチ"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p304.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p305",
+    "category": "bike_accessory",
+    "title": "キッズヘルメット Sサイズ",
+    "price_jpy": 2980,
+    "prime": true,
+    "delivery_days": 2,
+    "rating": 4.1,
+    "reviews": 4974,
+    "deal": false,
+    "tags": [
+      "キッズ",
+      "ヘルメット",
+      "安全"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p305.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p306",
+    "category": "bike_accessory",
+    "title": "プロテクターセット (ひじ/ひざ)",
+    "price_jpy": 2480,
+    "prime": true,
+    "delivery_days": 2,
+    "rating": 4.2,
+    "reviews": 694,
+    "deal": false,
+    "tags": [
+      "キッズ",
+      "プロテクター",
+      "安全"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p306.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p307",
+    "category": "bike_accessory",
+    "title": "自転車ベル かわいいデザイン",
+    "price_jpy": 980,
+    "prime": true,
+    "delivery_days": 1,
+    "rating": 4.0,
+    "reviews": 9692,
+    "deal": false,
+    "tags": [
+      "キッズ",
+      "ベル"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p307.png",
+    "url": "https://www.amazon.co.jp/"
+  },
+  {
+    "id": "p308",
+    "category": "bike_accessory",
+    "title": "反射シール セット",
+    "price_jpy": 780,
+    "prime": true,
+    "delivery_days": 1,
+    "rating": 4.1,
+    "reviews": 12372,
+    "deal": true,
+    "tags": [
+      "キッズ",
+      "安全",
+      "反射"
+    ],
+    "image": "/mnt/data/asahi_ai_shopper_demo/snapshot_images/p308.png",
+    "url": "https://www.amazon.co.jp/"
+  }
+]
