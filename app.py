@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import time
 import subprocess
 import urllib.parse
 from datetime import datetime
@@ -22,6 +23,45 @@ SELLER_OFFSETS = {"amazon": 1.00, "rakuten": 1.05, "lohaco": 1.03}
 MAX_CART_ITEMS = 5
 
 st.set_page_config(page_title="Asahi Group AIショッパー（デモ）", page_icon="🛒", layout="wide")
+
+# -----------------------------
+# Session State
+# -----------------------------
+if "conversation" not in st.session_state:
+    st.session_state["conversation"] = []   # what you send to LLM (strings)
+if "asked_qids" not in st.session_state:
+    st.session_state["asked_qids"] = set()
+if "messages" not in st.session_state:
+    st.session_state["messages"] = []       # chat transcript for UI [{role, content}]
+if "answers" not in st.session_state:
+    st.session_state["answers"] = {}
+if "llm_out" not in st.session_state:
+    st.session_state["llm_out"] = None
+if "stage" not in st.session_state:
+    st.session_state["stage"] = "idle"      # idle | waiting_answer | plan_ready
+if "pending_q" not in st.session_state:
+    st.session_state["pending_q"] = None    # the current question dict
+if "confirmed" not in st.session_state:
+    st.session_state["confirmed"] = False
+if "plan_cache" not in st.session_state:
+    st.session_state["plan_cache"] = None
+if "pending_action" not in st.session_state:
+    st.session_state["pending_action"] = None  # {"kind": "user_prompt"|"answer", ...}
+if "thinking" not in st.session_state:
+    st.session_state["thinking"] = False
+if "bundle_cache" not in st.session_state:
+    st.session_state["bundle_cache"] = None
+if "cart_started" not in st.session_state:
+    st.session_state["cart_started"] = False
+if "cart_cooldown_until" not in st.session_state:
+    st.session_state["cart_cooldown_until"] = 0.0
+if "cart_in_progress" not in st.session_state:
+    st.session_state["cart_in_progress"] = False
+if "cart_started_at" not in st.session_state:
+    st.session_state["cart_started_at"] = 0.0
+if "cart_last_error" not in st.session_state:
+    st.session_state["cart_last_error"] = None
+
 
 st.markdown("""
 <style>
@@ -116,7 +156,6 @@ section[data-testid="stSidebar"] {
             
 # -----------------------------
 /* Force light mode globally */
-<style>
 /* Force light mode rendering */
 :root { color-scheme: light; }
 
@@ -165,9 +204,7 @@ div[data-testid="stChatInput"] textarea{
   color: #111827 !important;
   border: 1px solid rgba(17,24,39,0.18) !important;
 }
-</style>
- 
-<style>
+
 /* Make the blinking typing cursor visible */
 div[data-testid="stChatInput"] textarea,
 div[data-testid="stChatInput"] input {
@@ -187,9 +224,7 @@ div[data-testid="stChatInput"] [contenteditable="true"]{
   caret-color: #111827 !important;
   color: #111827 !important;
 }
-</style>
 
-<style>
 .badge-link{
   display:inline-flex;
   align-items:center;
@@ -211,9 +246,7 @@ div[data-testid="stChatInput"] [contenteditable="true"]{
 .badge-amz { background: rgba(255, 153, 0, 0.15); }
 .badge-rak { background: rgba(191, 0, 0, 0.10); }
 .badge-loh { background: rgba(0, 120, 255, 0.10); }
-</style>     
 
-<style>
 /* ===== Chat message bubbles ===== */
 div[data-testid="stChatMessage"]{
   background: #F9FAFB !important;                 /* light tint so it’s not invisible on white */
@@ -258,6 +291,35 @@ div[data-testid="stAlert"]{
   border-radius: 14px !important;
   border: 1px solid rgba(17,24,39,0.12) !important;
 }
+            
+/* --- Assistant typing indicator --- */
+.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(17,24,39,0.65);
+  font-size: 13px;
+}
+.typing .dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.typing .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(17,24,39,0.35);
+  animation: blink 1.2s infinite ease-in-out;
+}
+.typing .dot:nth-child(2) { animation-delay: 0.15s; }
+.typing .dot:nth-child(3) { animation-delay: 0.30s; }
+
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0.2; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
+}
+            
 </style>            
 
 st.columns() + st.link_button()
@@ -300,6 +362,47 @@ def offer_price(product: dict, seller: str) -> int:
     # 3) else fallback mock
     return int(stable_base_price(product["asahi_id"]) * SELLER_OFFSETS[seller])
 
+def handle_llm_out(out: dict):
+    st.session_state["llm_out"] = out
+
+    plan = out.get("plan", {}) or {}
+    bundle_items = plan.get("bundle_items", []) or []
+
+    # Only consider questions we still need answers for
+    qs = [q for q in out.get("questions", []) if q["id"] not in st.session_state["answers"]]
+
+    # Pick the next not-yet-asked question (prevents repeats)
+    next_q = None
+    for q in qs:
+        if q["id"] not in st.session_state["asked_qids"]:
+            next_q = q
+            break
+
+    # If we still have a new question to ask
+    if next_q:
+        st.session_state["pending_q"] = next_q
+        st.session_state["asked_qids"].add(next_q["id"])
+        st.session_state["stage"] = "waiting_answer"
+        st.session_state["messages"].append({"role": "assistant", "content": next_q["question"]})
+        return
+
+    # Otherwise: show plan (even if model keeps returning questions)
+    st.session_state["pending_q"] = None
+    st.session_state["stage"] = "plan_ready"
+    st.session_state["plan_cache"] = plan
+    st.session_state["bundle_cache"] = bundle_items
+
+    if plan:
+        st.session_state["messages"].append({
+            "role": "assistant",
+            "content": render_plan_bubble(plan, bundle_items),
+        })
+    else:
+        st.session_state["messages"].append({
+            "role": "assistant",
+            "content": "すみません、条件をもとにプランを作れませんでした。もう一度だけ別の言い方で教えてください。",
+        })
+
 def build_amazon_cart_add_url(plan_items: list[dict], max_items: int = MAX_CART_ITEMS) -> str | None:
     base = "https://www.amazon.co.jp/gp/aws/cart/add.html"
     params = {}
@@ -321,6 +424,42 @@ def build_amazon_cart_add_url(plan_items: list[dict], max_items: int = MAX_CART_
     if i == 1:
         return None
     return base + "?" + urllib.parse.urlencode(params)
+
+def render_typing_bubble(text="考え中..."):
+    with st.chat_message("assistant"):
+        st.markdown(
+            f"""
+            <div class="typing">
+              <span>{text}</span>
+              <span class="dots">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+def render_plan_bubble(plan: dict, bundle_items: list[dict]) -> str:
+    title = plan.get("title", "")
+    assumptions = plan.get("assumptions", [])
+    note = plan.get("note", "")
+
+    lines = [f"### ✅ {title}"]
+    if assumptions:
+        lines.append("**AIが前提としていること**")
+        lines += [f"- {a}" for a in assumptions]
+    if note:
+        lines.append(f"\n_{note}_")
+
+    # Bundle summary (keep it short — details below)
+    lines.append("\n**おすすめなバンダル**")
+    for bi in bundle_items:
+        prod = PRODUCT_BY_ID[bi["asahi_id"]]
+        qty = int(bi["qty"])
+        reason = bi.get("reason", "")
+        lines.append(f"- **{prod['name_ja']}** × {qty}  \n  <span class='small'>理由: {reason}</span>")
+
+    return "\n".join(lines)
 
 # compact catalog grounding (small list)
 CATALOG_LINES = []
@@ -413,19 +552,6 @@ def llm_make_plan(conversation: list[str], answers: dict):
     )
     return json.loads(resp.output_text)
 
-# -----------------------------
-# Session State
-# -----------------------------
-if "conversation" not in st.session_state:
-    st.session_state["conversation"] = []
-if "messages" not in st.session_state:
-    st.session_state["messages"] = []
-if "answers" not in st.session_state:
-    st.session_state["answers"] = {}
-if "llm_out" not in st.session_state:
-    st.session_state["llm_out"] = None
-if "confirmed" not in st.session_state:
-    st.session_state["confirmed"] = False
 
 # -----------------------------
 # Sidebar (examples + debug)
@@ -453,146 +579,180 @@ with st.sidebar:
 # -----------------------------
 # Chat Input
 # -----------------------------
-st.markdown("### 💬 Chat")
 
 # Render chat history
 for m in st.session_state["messages"]:
     with st.chat_message(m["role"]):
-        st.markdown(m["content"])
+        st.markdown(m["content"], unsafe_allow_html=True)
+
+# Show typing indicator while we compute
+if st.session_state.get("thinking"):
+    render_typing_bubble("考え中...")
+
+# Single place where LLM is called
+if st.session_state.get("pending_action"):
+    out = llm_make_plan(st.session_state["conversation"], st.session_state["answers"])
+
+    handle_llm_out(out)
+
+    st.session_state["pending_action"] = None
+    st.session_state["thinking"] = False
+    st.rerun()
 
 # Input
-prompt = st.chat_input("ご希望をお知らせください（例：30名様のパーティー、予算10,000円、ノンアルコールのオプションを含む）)")
+# start mid way through if no messages yet
+if len(st.session_state["messages"]) == 0:
+    st.markdown("<div style='height:50vh'></div>", unsafe_allow_html=True)
+    st.markdown("""
+      <div class="card" style="max-width:760px;margin:auto;text-align:center">
+        <h3 style="margin:0">🤗 Asahiの世界へようこそ!!!</h3>
+        <h3 style="margin:0">今日はどのようなお手伝いをしましょうか？</h3>
+        <div class="small" style="margin-top:8px">
+          例：30人のパーティー。ビール中心。予算1万円。来週までに必要。
+        </div>
+      </div>
+    """, unsafe_allow_html=True)
+
+
+prompt = st.chat_input("例：30人のパーティー。予算10,000円。ノンアルも混ぜたい。")
 if prompt:
     st.session_state["messages"].append({"role": "user", "content": prompt})
     st.session_state["conversation"].append(prompt)
-    st.session_state["confirmed"] = False
+
+    st.session_state["pending_action"] = {"kind": "user_prompt"}
+    st.session_state["thinking"] = True
+    st.rerun()
+
+# Put “bundle cards + clickable badges” inside the assistant plan turn
+if st.session_state["stage"] == "plan_ready" and st.session_state["bundle_cache"]:
+    with st.chat_message("assistant"):
+        st.markdown("よろしければ、Amazon カートを今すぐ準備できます。")
+
+        now = time.time()
+        cooldown_until = float(st.session_state.get("cart_cooldown_until", 0.0))
+        in_cooldown = now < cooldown_until
+        in_progress = bool(st.session_state.get("cart_in_progress", False))
+
+        # Button (disabled during cooldown / progress)
+        clicked = st.button(
+            "🛒 Amazonカートを準備する",
+            type="primary",
+            disabled=(in_cooldown or in_progress),
+        )
+
+        # --- On click: start the job + set cooldown ---
+        if clicked:
+            st.session_state["cart_last_error"] = None
+            st.session_state["cart_in_progress"] = True
+            st.session_state["cart_started_at"] = time.time()
+            st.session_state["cart_cooldown_until"] = time.time() + 60  # 60 sec lock
+
+            # build ASIN list
+            asins = []
+            for it in st.session_state["bundle_cache"][:MAX_CART_ITEMS]:
+                prod = PRODUCT_BY_ID.get(it["asahi_id"])
+                if prod:
+                    asin = prod["offers"]["amazon"].get("asin")
+                    if asin:
+                        asins.append(asin)
+
+            try:
+                cmd = [
+                    "python",
+                    str(BASE / "amazon_cart_bot.py"),
+                    "--asins", json.dumps(asins, ensure_ascii=False),
+                    "--profile", str(BASE / "pw_amazon_profile"),
+                    "--keep_open",
+                ]
+                log_path = BASE / "cart_bot.log"
+                with open(log_path, "a", encoding="utf-8") as f:
+                    subprocess.Popen(cmd, stdout=f, stderr=f)
+
+                st.session_state["cart_started"] = True
+
+            except Exception as e:
+                st.session_state["cart_last_error"] = str(e)
+                st.session_state["cart_in_progress"] = False
+
+        # --- Status UI (ALWAYS rendered under the button) ---
+        if st.session_state.get("cart_last_error"):
+            st.error("カート準備の起動に失敗しました。cart_bot.log を確認してください。")
+            st.code(st.session_state["cart_last_error"])
+
+        # If we just started, keep user here for a few seconds with a progress animation
+        if st.session_state.get("cart_in_progress"):
+            st.info("準備を開始しました。数秒だけこの画面のままでお待ちください…")
+            prog = st.progress(0)
+
+            # A short “busy” animation (keeps user engaged)
+            # NOTE: This does NOT guarantee Amazon is finished; it’s just UX guidance.
+            for i in range(30):  # ~3 seconds
+                time.sleep(0.1)
+                prog.progress((i + 1) / 30)
+
+            st.session_state["cart_in_progress"] = False
+
+            st.success("✅ そろそろ Chrome ウィンドウに切り替えて、Amazonカートをご確認ください。")
+            st.caption("（環境によっては表示にもう少し時間がかかる場合があります）")
+
+        # Cooldown hint
+        if in_cooldown and not st.session_state.get("cart_in_progress"):
+            remaining = int(max(0, cooldown_until - time.time()))
+            st.caption(f"※ 連打防止のため、あと {remaining} 秒は再実行できません。")
+
+
+if st.session_state["stage"] == "waiting_answer" and st.session_state["pending_q"]:
+    q = st.session_state["pending_q"]
 
     with st.chat_message("assistant"):
-        with st.spinner("プランを作成中..."):
-            st.session_state["llm_out"] = llm_make_plan(
-                st.session_state["conversation"],
-                st.session_state["answers"],
-            )
-
-    st.rerun()
-
-# -----------------------------
-# If no LLM output yet, stop here
-# -----------------------------
-out = st.session_state.get("llm_out")
-if not out:
-    st.info("Type your request above to start. I’ll ask up to 2 quick questions, then build a bundle.")
-    st.stop()
-
-questions = out.get("questions", [])
-plan = out.get("plan", {})
-# One-time: append assistant summary into chat if not already appended
-if "last_plan_hash" not in st.session_state:
-    st.session_state["last_plan_hash"] = None
-
-plan_hash = json.dumps(plan, ensure_ascii=False)
-if plan_hash != st.session_state["last_plan_hash"]:
-    st.session_state["last_plan_hash"] = plan_hash
-    summary = f"**{plan.get('title','')}**\n\n" + "\n".join([f"- {a}" for a in plan.get("assumptions", [])])
-    if plan.get("note"):
-        summary += f"\n\n_{plan['note']}_"
-    st.session_state["messages"].append({"role": "assistant", "content": summary})
-    st.rerun()
-
-# -----------------------------
-# Questions UI (0–2)
-# -----------------------------
-if questions and not st.session_state["confirmed"]:
-    st.markdown("### ❓ 追加で確認したいこと")
-    new_answers = dict(st.session_state["answers"])
-
-    for q in questions:
         qid = q["id"]
-        label = q["question"]
         qtype = q["type"]
         opts = q.get("options", [])
         default = q.get("default")
 
+        # Render the answer widget inside the chat bubble
         if qtype == "choice":
             if default is None and opts:
                 default = opts[0]
-            val = st.selectbox(label, options=opts, index=(opts.index(default) if default in opts else 0), key=f"q_{qid}")
-            new_answers[qid] = val
-
+            val = st.selectbox(
+                "お選びください",
+                options=opts,
+                index=(opts.index(default) if default in opts else 0),
+                key=f"active_q_{qid}",
+            )
         elif qtype == "number":
             dv = int(default) if isinstance(default, int) else 0
-            val = st.number_input(label, min_value=0, value=dv, step=100, key=f"q_{qid}")
-            new_answers[qid] = int(val)
-
-        elif qtype == "date":
-            # store as ISO string
+            val = st.number_input(
+                "Enter a number",
+                min_value=0,
+                value=dv,
+                step=100,
+                key=f"active_q_{qid}",
+            )
+            val = int(val)
+        else:  # date
             today = datetime.now().date()
-            val = st.date_input(label, value=today, key=f"q_{qid}")
-            new_answers[qid] = str(val)
+            picked = st.date_input("Pick a date", value=today, key=f"active_q_{qid}")
+            val = str(picked)
 
-    if st.button("この条件で提案を更新", type="primary"):
-        st.session_state["answers"] = new_answers
-        st.session_state["llm_out"] = llm_make_plan(st.session_state["conversation"], st.session_state["answers"])
-        st.rerun()
+        # Optional quick-replies (chips) for choice
+        if qtype == "choice" and opts:
+            st.markdown("<div class='small'>Quick replies:</div>", unsafe_allow_html=True)
+            cols = st.columns(min(4, len(opts)))
+            for i, opt in enumerate(opts[:4]):
+                if cols[i].button(opt, key=f"chip_{qid}_{i}"):
+                    st.session_state[f"active_q_{qid}"] = opt
+                    st.rerun()
 
-# -----------------------------
-# Plan + Bundle Cards
-# -----------------------------
-st.markdown("### 🧠 提案プラン")
-st.markdown(f"<div class='card'><b>{plan.get('title','')}</b><hr>", unsafe_allow_html=True)
-for a in plan.get("assumptions", []):
-    st.markdown(f"- {a}")
-st.markdown(f"<div class='small'>{plan.get('note','')}</div></div>", unsafe_allow_html=True)
+        if st.button("送信", type="primary", key=f"submit_{qid}"):
+            st.session_state["answers"][qid] = val
+            st.session_state["messages"].append({"role": "user", "content": str(val)})
+            st.session_state["conversation"].append(f"{q['question']} → {val}")
 
-bundle_items = plan.get("bundle_items", [])
+            st.session_state["pending_action"] = {"kind": "answer", "qid": qid}
+            st.session_state["thinking"] = True
+            st.rerun()
 
-st.markdown("### 🛍️ バンドル（外部ECへ送客）")
-for bi in bundle_items:
-    prod = PRODUCT_BY_ID[bi["asahi_id"]]
-    qty = int(bi["qty"])
-    reason = bi.get("reason", "")
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown(f"**{prod['name_ja']}**  × {qty}")
-    if reason:
-        st.markdown(f"<div class='small'>理由: {reason}</div>", unsafe_allow_html=True)
-
-    # seller offers with mocked prices
-    amz_p = offer_price(prod, "amazon")
-    rak_p = offer_price(prod, "rakuten")
-    loh_p = offer_price(prod, "lohaco")
-
-    amz_url = prod["offers"]["amazon"]["url"]
-    rak_url = prod["offers"]["rakuten"]["url"]
-    loh_url = prod["offers"]["lohaco"]["url"]
-
-    st.markdown(
-        f"""
-        <div style="margin-top:6px">
-        <a class="badge-link badge-amz" href="{amz_url}" target="_blank" rel="noopener noreferrer">
-            Amazon <span>{yen(amz_p)}</span>
-        </a>
-        <a class="badge-link badge-rak" href="{rak_url}" target="_blank" rel="noopener noreferrer">
-            Rakuten <span>{yen(rak_p)}</span>
-        </a>
-        <a class="badge-link badge-loh" href="{loh_url}" target="_blank" rel="noopener noreferrer">
-            LOHACO <span>{yen(loh_p)}</span>
-        </a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-# -----------------------------
-# Confirm + Amazon Cart Add (demo)
-# -----------------------------
-st.markdown("---")
-col1, col2 = st.columns([0.5, 0.5])
-with col1:
-    if st.button("✅ このプランで確定（デモ）", type="primary"):
-        st.session_state["confirmed"] = True
-        st.success("確定しました。Amazonまとめて追加（デモ）を有効化しました。")
-with col2:
-    st.caption("※デモではAmazonのみ“まとめてカート投入”を実演（最大5商品）。")
 
 if st.session_state["confirmed"]:
     asins = []
