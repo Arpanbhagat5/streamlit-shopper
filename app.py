@@ -25,16 +25,244 @@ st.set_page_config(page_title="Asahi Group AIショッパー（デモ）", page_
 
 st.markdown("""
 <style>
-.stApp { background: light blue; }
-.card { border: 1px solid rgba(0,0,0,0.08); border-radius: 14px; padding: 12px; background: grey; }
-.badge { display:inline-block; padding:3px 8px; border-radius:999px; border:1px solid rgba(0,0,0,0.12); margin-right:6px; font-size:12px;}
+/* --- Base canvas --- */
+.stApp {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+/* Make sure typical text is readable */
+html, body, [class*="css"]  {
+  color: #111827 !important;
+}
+
+/* Main container spacing */
+.block-container {
+  padding-top: 1.2rem;
+}
+
+/* --- Cards --- */
+.card {
+  border: 1px solid rgba(17, 24, 39, 0.10);
+  border-radius: 14px;
+  padding: 12px;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(17, 24, 39, 0.06);
+}
+
+/* --- Small / helper text --- */
+.small {
+  color: rgba(17, 24, 39, 0.70);
+  font-size: 13px;
+}
+
+/* --- Divider --- */
+hr {
+  border: none;
+  border-top: 1px solid rgba(17, 24, 39, 0.10);
+  margin: 10px 0;
+}
+
+/* --- Badges --- */
+.badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  margin-right: 6px;
+  font-size: 12px;
+  background: #F3F4F6;
+  color: #111827;
+}
+
+.badge-amz { background: rgba(245, 158, 11, 0.18); }   /* amber */
+.badge-rak { background: rgba(220, 38, 38, 0.14); }    /* red */
+.badge-loh { background: rgba(37, 99, 235, 0.14); }    /* blue */
+
+/* --- Buttons (optional polish) --- */
+.stButton > button {
+  border-radius: 10px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  background: #ffffff;
+  color: #111827;
+}
+
+.stButton > button:hover {
+  background: #F9FAFB;
+}
+
+/* --- Inputs (optional polish) --- */
+.stTextInput input, .stNumberInput input, .stDateInput input, textarea {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border: 1px solid rgba(17, 24, 39, 0.14) !important;
+  border-radius: 10px !important;
+}
+
+/* --- Chat bubbles (helps the “chat feel” look clean on white) --- */
+.stChatMessage {
+  border-radius: 14px;
+}
+
+.stChatMessage [data-testid="stMarkdownContainer"] {
+  color: #111827 !important;
+}
+
+/* --- Sidebar --- */
+section[data-testid="stSidebar"] {
+  background: #F6F7F9 !important;
+  border-right: 1px solid rgba(17, 24, 39, 0.08);
+}
+            
+# -----------------------------
+/* Force light mode globally */
+<style>
+/* Force light mode rendering */
+:root { color-scheme: light; }
+
+/* App surfaces */
+html, body { background: #ffffff !important; }
+.stApp, div[data-testid="stAppViewContainer"], div[data-testid="stMain"], div[data-testid="stMainBlockContainer"]{
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+/* --- Top area (the black bar region) --- */
+div[data-testid="stDecoration"]{
+  background: #ffffff !important;
+}
+header[data-testid="stHeader"]{
+  background: #ffffff !important;
+  border-bottom: 1px solid rgba(17,24,39,0.10) !important;
+}
+div[data-testid="stToolbar"]{
+  background: #ffffff !important;
+}
+header[data-testid="stHeader"] * , div[data-testid="stToolbar"] *{
+  color: #111827 !important;
+}
+
+/* --- Bottom sticky area (chat input strip) --- */
+div[data-testid="stBottom"]{
+  background: #ffffff !important;
+  border-top: 1px solid rgba(17,24,39,0.10) !important;
+}
+div[data-testid="stBottomBlockContainer"]{
+  background: #ffffff !important;
+}
+
+/* Chat input itself */
+div[data-testid="stChatInput"]{
+  background: #ffffff !important;
+}
+div[data-testid="stChatInput"] *{
+  color: #111827 !important;
+}
+
+/* Optional: make the input look nicer on white */
+div[data-testid="stChatInput"] textarea{
+  background: #ffffff !important;
+  color: #111827 !important;
+  border: 1px solid rgba(17,24,39,0.18) !important;
+}
+</style>
+ 
+<style>
+/* Make the blinking typing cursor visible */
+div[data-testid="stChatInput"] textarea,
+div[data-testid="stChatInput"] input {
+  caret-color: #111827 !important;   /* cursor color */
+  color: #111827 !important;        /* typed text */
+  background: #ffffff !important;
+}
+
+/* If placeholder text is too faint */
+div[data-testid="stChatInput"] textarea::placeholder,
+div[data-testid="stChatInput"] input::placeholder {
+  color: rgba(17,24,39,0.45) !important;
+}
+
+/* Sometimes Streamlit wraps with contenteditable */
+div[data-testid="stChatInput"] [contenteditable="true"]{
+  caret-color: #111827 !important;
+  color: #111827 !important;
+}
+</style>
+
+<style>
+.badge-link{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:3px 10px;
+  border-radius:999px;
+  border:1px solid rgba(0,0,0,0.14);
+  text-decoration:none !important;
+  font-size:12px;
+  font-weight:600;
+  color:#111827 !important;
+  margin-right:8px;
+  line-height:1.6;
+}
+.badge-link:hover{
+  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
 .badge-amz { background: rgba(255, 153, 0, 0.15); }
 .badge-rak { background: rgba(191, 0, 0, 0.10); }
 .badge-loh { background: rgba(0, 120, 255, 0.10); }
-.small { color: rgba(0,0,0,0.65); font-size: 13px; }
-hr { border: none; border-top: 1px solid rgba(0,0,0,0.08); margin: 10px 0; }
-</style>
+</style>     
+
+<style>
+/* ===== Chat message bubbles ===== */
+div[data-testid="stChatMessage"]{
+  background: #F9FAFB !important;                 /* light tint so it’s not invisible on white */
+  border: 1px solid rgba(17,24,39,0.16) !important;
+  border-radius: 16px !important;
+  padding: 12px 14px !important;
+  margin: 10px 0 !important;
+  box-shadow: 0 6px 14px rgba(17,24,39,0.06) !important;
+}
+
+/* Avoid inner container overriding the bubble look */
+div[data-testid="stChatMessage"] [data-testid="stChatMessageContent"]{
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* Make the avatar area look consistent */
+div[data-testid="stChatMessageAvatar"]{
+  border-radius: 999px !important;
+  border: 1px solid rgba(17,24,39,0.10) !important;
+  background: #ffffff !important;
+}
+
+/* ===== Make interactive widgets feel “boxed” too ===== */
+div[data-testid="stSelectbox"] [role="combobox"]{
+  border: 1px solid rgba(17,24,39,0.16) !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+}
+
+div[data-testid="stTextInput"] input,
+div[data-testid="stNumberInput"] input,
+div[data-testid="stDateInput"] input,
+div[data-testid="stChatInput"] textarea{
+  border: 1px solid rgba(17,24,39,0.18) !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+}
+
+/* Make the "info" bar more visible (optional) */
+div[data-testid="stAlert"]{
+  border-radius: 14px !important;
+  border: 1px solid rgba(17,24,39,0.12) !important;
+}
+</style>            
+
+st.columns() + st.link_button()
 """, unsafe_allow_html=True)
+
 
 st.markdown("## Asahi Group AIショッパー（デモ）")
 st.caption("Asahi商品を提案 → 外部EC（Amazon / Rakuten / LOHACO）へ送客する想定のデモ")
@@ -233,14 +461,14 @@ for m in st.session_state["messages"]:
         st.markdown(m["content"])
 
 # Input
-prompt = st.chat_input("Tell me what you want (e.g., party for 30, budget 10,000 yen, include non-alcohol options)")
+prompt = st.chat_input("ご希望をお知らせください（例：30名様のパーティー、予算10,000円、ノンアルコールのオプションを含む）)")
 if prompt:
     st.session_state["messages"].append({"role": "user", "content": prompt})
     st.session_state["conversation"].append(prompt)
     st.session_state["confirmed"] = False
 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.spinner("プランを作成中..."):
             st.session_state["llm_out"] = llm_make_plan(
                 st.session_state["conversation"],
                 st.session_state["answers"],
@@ -275,7 +503,7 @@ if plan_hash != st.session_state["last_plan_hash"]:
 # Questions UI (0–2)
 # -----------------------------
 if questions and not st.session_state["confirmed"]:
-    st.markdown("### ❓ 追加で確認（最大2つ）")
+    st.markdown("### ❓ 追加で確認したいこと")
     new_answers = dict(st.session_state["answers"])
 
     for q in questions:
@@ -333,26 +561,26 @@ for bi in bundle_items:
     rak_p = offer_price(prod, "rakuten")
     loh_p = offer_price(prod, "lohaco")
 
-    amz = prod["offers"]["amazon"]["url"]
-    rak = prod["offers"]["rakuten"]["url"]
-    loh = prod["offers"]["lohaco"]["url"]
+    amz_url = prod["offers"]["amazon"]["url"]
+    rak_url = prod["offers"]["rakuten"]["url"]
+    loh_url = prod["offers"]["lohaco"]["url"]
 
     st.markdown(
-        f"<span class='badge badge-amz'>Amazon</span> {yen(amz_p)}  ｜ "
-        f"<span class='badge badge-rak'>Rakuten</span> {yen(rak_p)}  ｜ "
-        f"<span class='badge badge-loh'>LOHACO</span> {yen(loh_p)}",
-        unsafe_allow_html=True
+        f"""
+        <div style="margin-top:6px">
+        <a class="badge-link badge-amz" href="{amz_url}" target="_blank" rel="noopener noreferrer">
+            Amazon <span>{yen(amz_p)}</span>
+        </a>
+        <a class="badge-link badge-rak" href="{rak_url}" target="_blank" rel="noopener noreferrer">
+            Rakuten <span>{yen(rak_p)}</span>
+        </a>
+        <a class="badge-link badge-loh" href="{loh_url}" target="_blank" rel="noopener noreferrer">
+            LOHACO <span>{yen(loh_p)}</span>
+        </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.link_button("Amazonで見る", amz)
-    with c2:
-        st.link_button("Rakutenで見る", rak)
-    with c3:
-        st.link_button("LOHACOで見る", loh)
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
 # -----------------------------
 # Confirm + Amazon Cart Add (demo)
@@ -380,7 +608,7 @@ if st.session_state["confirmed"]:
     else:
         colA, colB = st.columns([0.35, 0.65])
         with colA:
-            if st.button("🛒 Add bundle to Amazon cart (Playwright)", type="primary"):
+            if st.button("🛒 バンドルをAmazonカートに追加（Playwright）", type="primary"):
                 cmd = [
                     "python",
                     str(BASE / "amazon_cart_bot.py"),
@@ -394,19 +622,19 @@ if st.session_state["confirmed"]:
                 log_path = BASE / "cart_bot.log"
                 with open(log_path, "a", encoding="utf-8") as f:
                     subprocess.Popen(cmd, stdout=f, stderr=f)
-                st.success("Started cart prep. If it closes, open cart_bot.log to see why.")
+                st.success("カートの準備を開始しました。終了した場合は、cart_bot.log を開いて理由を確認してください。")
                 st.code(str(log_path))
 
                 # record a state so we can show a “next step” panel
                 st.session_state["cart_started"] = True
-                st.success("Amazon cart prep started in a Chrome window.")
+                st.success("Amazon カートの準備が Chrome ウィンドウで開始されました。")
                 st.rerun()
 
-        with colB:
-            st.caption("Demo flow: click → switch to Chrome window → cart is ready → come back here.")
+        # with colB:
+            # st.caption("Demo flow: click → switch to Chrome window → cart is ready → come back here.")
 
         if st.session_state.get("cart_started"):
             st.info(
-                "✅ Next step: Switch to the **Chrome window** that opened, confirm items in the **Amazon cart**, "
-                "then come back to this page to continue the conversation."
+                "✅ 次のステップ: 開いた **Chrome ウィンドウ** に切り替えて、**Amazon カート** 内の商品を確認し、 "
+                "その後、このページに戻って会話を続けてください。"
             )

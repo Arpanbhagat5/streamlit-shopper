@@ -45,9 +45,9 @@
       "name_ja": "アマノフーズ いつものおみそ汁 バラエティ",
       "tags": ["アマノフーズ", "味噌汁", "ストック", "簡単"],
       "offers": {
-        "amazon": { "asin": "B09NQYS7WF", "url": "https://www.amazon.co.jp/dp/B09NQYS7WF" },
-        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%81%84%E3%81%A4%E3%82%82%E3%81%AE%E3%81%8A%E3%81%BF%E3%81%9D%E3%81%97%E3%82%8B/" },
-        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%81%84%E3%81%A4%E3%82%82%E3%81%AE%E3%81%8A%E3%81%BF%E3%81%9D%E3%81%97%E3%82%8B" }
+        "amazon": { "asin": "B09NQYS7WF", "url": "https://www.amazon.co.jp/dp/B09NQYS7WF", "price_jpy": 1300 },
+        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%81%84%E3%81%A4%E3%82%82%E3%81%AE%E3%81%8A%E3%81%BF%E3%81%9D%E3%81%97%E3%82%8B/", "price_jpy": 1300 },
+        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%81%84%E3%81%A4%E3%82%82%E3%81%AE%E3%81%8A%E3%81%BF%E3%81%9D%E3%81%97%E3%82%8B", "price_jpy": 1400 }
       }
     },
     {
@@ -55,9 +55,9 @@
       "name_ja": "アマノフーズ 野菜と鶏肉のカレー",
       "tags": ["アマノフーズ", "カレー", "ストック", "簡単"],
       "offers": {
-        "amazon": { "asin": "B09HHCLVZ3", "url": "https://www.amazon.co.jp/dp/B09HHCLVZ3" },
-        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E9%B6%8F%E8%82%89%20%E3%82%AB%E3%83%AC%E3%83%BC/" },
-        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E9%B6%8F%E8%82%89%20%E3%82%AB%E3%83%AC%E3%83%BC" }
+        "amazon": { "asin": "B09HHCLVZ3", "url": "https://www.amazon.co.jp/dp/B09HHCLVZ3", "price_jpy": 1150 },
+        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E9%B6%8F%E8%82%89%20%E3%82%AB%E3%83%AC%E3%83%BC/", "price_jpy": 1150 },
+        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E9%B6%8F%E8%82%89%20%E3%82%AB%E3%83%AC%E3%83%BC", "price_jpy": 1300 }
       }
     },
     {
@@ -65,9 +65,9 @@
       "name_ja": "アマノフーズ カレー 4種アソート",
       "tags": ["アマノフーズ", "カレー", "バラエティ", "ストック"],
       "offers": {
-        "amazon": { "asin": "B09HHF886J", "url": "https://www.amazon.co.jp/dp/B09HHF886J" },
-        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E3%82%AB%E3%83%AC%E3%83%BC%20%E3%82%A2%E3%82%BD%E3%83%BC%E3%83%88/" },
-        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E3%82%AB%E3%83%AC%E3%83%BC%20%E3%82%A2%E3%82%BD%E3%83%BC%E3%83%88" }
+        "amazon": { "asin": "B09HHF886J", "url": "https://www.amazon.co.jp/dp/B09HHF886J", "price_jpy": 1500 },
+        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E3%82%AB%E3%83%AC%E3%83%BC%20%E3%82%A2%E3%82%BD%E3%83%BC%E3%83%88/", "price_jpy": 1500 },
+        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E3%82%AB%E3%83%AC%E3%83%BC%20%E3%82%A2%E3%82%BD%E3%83%BC%E3%83%88", "price_jpy": 1400 }
       }
     },
     {
@@ -75,9 +75,9 @@
       "name_ja": "アマノフーズ たまごスープ",
       "tags": ["アマノフーズ", "スープ", "簡単", "ストック"],
       "offers": {
-        "amazon": { "asin": "B0753XS44S", "url": "https://www.amazon.co.jp/dp/B0753XS44S" },
-        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E3%81%9F%E3%81%BE%E3%81%94%E3%82%B9%E3%83%BC%E3%83%97/" },
-        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E3%81%9F%E3%81%BE%E3%81%94%E3%82%B9%E3%83%BC%E3%83%97" }
+        "amazon": { "asin": "B0753XS44S", "url": "https://www.amazon.co.jp/dp/B0753XS44S", "price_jpy": 1200 },
+        "rakuten": { "url": "https://search.rakuten.co.jp/search/mall/%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E3%81%9F%E3%81%BE%E3%81%94%E3%82%B9%E3%83%BC%E3%83%97/", "price_jpy": 1200 },
+        "lohaco": { "url": "https://lohaco.yahoo.co.jp/search?p=%E3%82%A2%E3%83%9E%E3%83%8E%E3%83%95%E3%83%BC%E3%82%BA%20%E3%81%9F%E3%81%BE%E3%81%94%E3%82%B9%E3%83%BC%E3%83%97", "price_jpy": 1400 }
       }
     }
   ]
