@@ -27,6 +27,8 @@ st.set_page_config(page_title="Asahi Group AIショッパー（デモ）", page_
 # -----------------------------
 # Session State
 # -----------------------------
+if "welcome_shown" not in st.session_state:
+    st.session_state["welcome_shown"] = False
 if "bundles_cache" not in st.session_state:
     st.session_state["bundles_cache"] = None  # list of bundle options
 if "selected_bundle_id" not in st.session_state:
@@ -660,7 +662,22 @@ with st.sidebar:
 # -----------------------------
 # Chat Input
 # -----------------------------
+# initial bubble 
+WELCOME_BUBBLE = """
+**Asahiの世界へようこそ!!!**  
+今日はどのようなお手伝いをしましょうか？
 
+<div style="margin-top:10px, "margin-bottom:10px;">
+例：6人のパーティー。ビール中心。予算3万円。来週までに必要。  
+&nbsp;
+例：アマノフーズで平日ランチのストックをしたい。  
+</div>
+&nbsp;
+"""
+
+if (not st.session_state["welcome_shown"]) and (len(st.session_state["messages"]) == 0):
+    st.session_state["messages"].append({"role": "assistant", "content": WELCOME_BUBBLE})
+    st.session_state["welcome_shown"] = True
 # Render chat history
 for m in st.session_state["messages"]:
     with st.chat_message(m["role"]):
@@ -679,20 +696,6 @@ if st.session_state.get("pending_action"):
     st.session_state["pending_action"] = None
     st.session_state["thinking"] = False
     st.rerun()
-
-# Input
-# start mid way through if no messages yet
-if len(st.session_state["messages"]) == 0:
-    st.markdown("<div style='height:50vh'></div>", unsafe_allow_html=True)
-    st.markdown("""
-      <div class="card" style="max-width:760px;margin:auto;text-align:center">
-        <h3 style="margin:0">🤗 Asahiの世界へようこそ!!!</h3>
-        <h3 style="margin:0">今日はどのようなお手伝いをしましょうか？</h3>
-        <div class="small" style="margin-top:8px">
-          例：30人のパーティー。ビール中心。予算1万円。来週までに必要。
-        </div>
-      </div>
-    """, unsafe_allow_html=True)
 
 
 prompt = st.chat_input("例：30人のパーティー。予算10,000円。ノンアルも混ぜたい。")
