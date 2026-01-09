@@ -22,6 +22,9 @@ CATALOG_PATH = BASE / "asahi_catalog.json"
 SELLER_OFFSETS = {"amazon": 1.00, "rakuten": 1.05, "lohaco": 1.03}
 MAX_CART_ITEMS = 5
 
+PROGRESS_SECONDS = 12          # how long to keep user engaged in-app
+PROGRESS_TICKS = PROGRESS_SECONDS * 10  # 0.1s steps
+
 st.set_page_config(page_title="Asahi Group AIショッパー（デモ）", page_icon="🛒", layout="wide")
 
 # -----------------------------
@@ -65,6 +68,8 @@ if "cart_started_at" not in st.session_state:
     st.session_state["cart_started_at"] = 0.0
 if "cart_last_error" not in st.session_state:
     st.session_state["cart_last_error"] = None
+if "flow_done" not in st.session_state:
+    st.session_state["flow_done"] = False
 
 
 st.markdown("""
@@ -324,6 +329,15 @@ div[data-testid="stAlert"]{
   40% { opacity: 1; transform: translateY(-2px); }
 }
             
+.stCaption, .stCaption p {
+  color: rgba(17, 24, 39, 0.65) !important;  /* grey */
+}
+
+/* Some Streamlit versions wrap captions like this */
+div[data-testid="stCaptionContainer"] p {
+  color: rgba(17, 24, 39, 0.65) !important;
+}
+
 </style>            
 
 st.columns() + st.link_button()
@@ -796,14 +810,17 @@ if st.session_state["stage"] == "plan_ready" and st.session_state.get("bundles_c
             st.code(st.session_state["cart_last_error"])
 
         if st.session_state.get("cart_in_progress"):
-            st.info("準備を開始しました。数秒だけこの画面のままでお待ちください…")
-            prog = st.progress(0)
-            for i in range(30):
-                time.sleep(0.1)
-                prog.progress((i + 1) / 30)
-            st.session_state["cart_in_progress"] = False
-            st.success("✅ そろそろ Chrome ウィンドウに切り替えて、Amazonカートをご確認ください。")
-            st.caption("（環境によっては表示にもう少し時間がかかる場合があります）")
+          st.info("準備を開始しました。この画面のままでOKです（裏で処理しています）…")
+          st.caption("※ Chrome が自動で開きます。最初に白い画面が出ても正常です（数秒で表示されます）。")
+
+          prog = st.progress(0)
+          for i in range(PROGRESS_TICKS):  # e.g. 120 ticks = ~12 seconds
+              time.sleep(0.1)
+              prog.progress((i + 1) / PROGRESS_TICKS)
+
+          st.session_state["cart_in_progress"] = False
+          st.success("そろそろ Chrome ウィンドウに切り替えて、Amazonカートをご確認ください。")
+          st.caption("（環境6人のパーティー。ビール中心。ート反映までさらに数秒かかる場合があります）")
 
         if in_cooldown and not st.session_state.get("cart_in_progress"):
             remaining = int(max(0, cooldown_until - time.time()))
