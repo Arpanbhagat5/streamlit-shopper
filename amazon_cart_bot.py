@@ -11,33 +11,22 @@ CART_URL = "https://www.amazon.co.jp/gp/cart/view.html"
 
 
 def is_logged_in(page) -> bool:
-    """
-    More reliable JP Amazon heuristic:
-    - #nav-link-accountList-nav-line-1 shows "こんにちは、ログイン" when logged out
-    - shows "こんにちは、〇〇" when logged in
-    """
     try:
         loc = page.locator("#nav-link-accountList-nav-line-1")
         if loc.count() == 0:
-            # fallback: if signin link exists, likely logged out
-            return page.locator("a[href*='ap/signin']").count() == 0
-
+            return False  # IMPORTANT: don't assume logged-in on about:blank
         text = (loc.first.inner_text(timeout=2000) or "").strip()
         return ("ログイン" not in text) and ("サインイン" not in text)
     except Exception:
-        return page.locator("a[href*='ap/signin']").count() == 0
+        return False
 
 
 def wait_for_login(page, seconds: int = 180) -> bool:
-    """
-    Keep the window open and wait for manual login.
-    """
     deadline = time.time() + seconds
     while time.time() < deadline:
         if is_logged_in(page):
             return True
         page.wait_for_timeout(1000)
-        # gentle refresh in case the header doesn't update
         try:
             page.reload(wait_until="domcontentloaded", timeout=15000)
         except Exception:
@@ -91,7 +80,7 @@ def try_click_add_to_cart(page) -> bool:
     return False
 
 
-def add_asins_to_cart(asins, user_data_dir: str, headless: bool, keep_open: bool, wait_login_seconds: int):
+def add_items_to_cart(items, user_data_dir: str, headless: bool, keep_open: bool, wait_login_seconds: int):
     user_data_dir = str(Path(user_data_dir).resolve())
     os.makedirs(user_data_dir, exist_ok=True)
 
@@ -108,58 +97,69 @@ def add_asins_to_cart(asins, user_data_dir: str, headless: bool, keep_open: bool
         page.set_default_timeout(8000)
         page.set_default_navigation_timeout(60000)
 
+        # IMPORTANT: go to home before login check
+        page.goto(AMAZON_HOME, wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(500)
 
-        # Skip home. Go straight to first product page.
-        # page.goto(AMAZON_HOME, wait_until="domcontentloaded", timeout=60000)
-        # page.wait_for_timeout(500)
-
-        # No input() — just wait for login if needed
         if not is_logged_in(page):
             print(f"[BOT] Not logged in. Please login in the opened Chrome window (waiting up to {wait_login_seconds}s)...")
             ok = wait_for_login(page, wait_login_seconds)
             if not ok:
-                print("[BOT] Login not detected within timeout. Exiting (keeping window open if keep_open).")
+                print("[BOT] Login not detected within timeout.")
                 if keep_open and not headless:
-                    page.goto(AMAZON_HOME, wait_until="domcontentloaded")
-                    page.wait_for_timeout(9999999)
+                    try:
+                        page.wait_for_timeout(9999999)
+                    except Exception:
+                        pass
                 context.close()
                 return {"added": [], "failed": [{"asin": "*", "reason": "login not detected"}]}
 
         added, failed = [], []
 
-        for asin in asins:
+        for it in items:
+            asin = it.get("asin")
+            qty = int(it.get("qty", 1) or 1)
+            if not asin or qty <= 0:
+                continue
+
             url = f"https://www.amazon.co.jp/dp/{asin}?th=1&psc=1"
-            try:
-                page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                page.wait_for_timeout(300)
 
-                if not try_click_add_to_cart(page):
-                    page.screenshot(path=f"debug_{asin}.png", full_page=True)
-                    failed.append({"asin": asin, "reason": "add-to-cart button not found (saved debug PNG)"})
-                    continue
-
-                page.wait_for_timeout(350)
-                added.append(asin)
-
-                # Close common overlays best-effort
+            for n in range(qty):  # <-- quantity support (minimal + reliable)
                 try:
-                    for txt in ["閉じる", "いいえ", "スキップ", "次へ進む", "続行"]:
-                        loc = page.get_by_role("button", name=txt)
-                        if loc.count() > 0:
-                            loc.first.click(timeout=1200)
-                            page.wait_for_timeout(200)
-                except Exception:
-                    pass
+                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(300)
 
-            except Exception as e:
-                failed.append({"asin": asin, "reason": str(e)})
+                    if not try_click_add_to_cart(page):
+                        page.screenshot(path=f"debug_{asin}.png", full_page=True)
+                        failed.append({"asin": asin, "reason": "add-to-cart button not found (saved debug PNG)"})
+                        break
+
+                    page.wait_for_timeout(450)
+                    added.append(asin)
+
+                    # Close common overlays best-effort
+                    try:
+                        for txt in ["閉じる", "いいえ", "スキップ", "次へ進む", "続行"]:
+                            loc = page.get_by_role("button", name=txt)
+                            if loc.count() > 0:
+                                loc.first.click(timeout=1200)
+                                page.wait_for_timeout(200)
+                    except Exception:
+                        pass
+
+                except Exception as e:
+                    failed.append({"asin": asin, "reason": str(e)})
+                    break
 
         page.goto(CART_URL, wait_until="domcontentloaded")
         page.wait_for_timeout(800)
 
         if keep_open and not headless:
             print("[BOT] Cart opened. Close the Chrome window when done.")
-            page.wait_for_timeout(9999999)
+            try:
+                page.wait_for_timeout(9999999)
+            except Exception:
+                pass
 
         context.close()
         return {"added": added, "failed": failed}
@@ -167,16 +167,16 @@ def add_asins_to_cart(asins, user_data_dir: str, headless: bool, keep_open: bool
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--asins", type=str, required=True)
+    ap.add_argument("--items", type=str, required=True, help="JSON: [{asin, qty}, ...]")
     ap.add_argument("--profile", type=str, default="./pw_amazon_profile")
     ap.add_argument("--headless", action="store_true")
     ap.add_argument("--keep_open", action="store_true")
     ap.add_argument("--wait_login_seconds", type=int, default=180)
     args = ap.parse_args()
 
-    asins = json.loads(args.asins)
-    result = add_asins_to_cart(
-        asins=asins,
+    items = json.loads(args.items)
+    result = add_items_to_cart(
+        items=items,
         user_data_dir=args.profile,
         headless=args.headless,
         keep_open=args.keep_open,

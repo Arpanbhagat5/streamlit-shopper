@@ -27,6 +27,10 @@ st.set_page_config(page_title="Asahi Group AIショッパー（デモ）", page_
 # -----------------------------
 # Session State
 # -----------------------------
+if "bundles_cache" not in st.session_state:
+    st.session_state["bundles_cache"] = None  # list of bundle options
+if "selected_bundle_id" not in st.session_state:
+    st.session_state["selected_bundle_id"] = "mid"  # default choice
 if "conversation" not in st.session_state:
     st.session_state["conversation"] = []   # what you send to LLM (strings)
 if "asked_qids" not in st.session_state:
@@ -41,8 +45,6 @@ if "stage" not in st.session_state:
     st.session_state["stage"] = "idle"      # idle | waiting_answer | plan_ready
 if "pending_q" not in st.session_state:
     st.session_state["pending_q"] = None    # the current question dict
-if "confirmed" not in st.session_state:
-    st.session_state["confirmed"] = False
 if "plan_cache" not in st.session_state:
     st.session_state["plan_cache"] = None
 if "pending_action" not in st.session_state:
@@ -362,11 +364,67 @@ def offer_price(product: dict, seller: str) -> int:
     # 3) else fallback mock
     return int(stable_base_price(product["asahi_id"]) * SELLER_OFFSETS[seller])
 
+# Badges for sellers
+def pick_seller(prod: dict, seller_preference: str) -> str:
+    if seller_preference in ("amazon", "rakuten", "lohaco"):
+        return seller_preference
+    # any -> prefer amazon if present
+    return "amazon"
+
+def bundle_est_total_jpy(bundle_items: list[dict]) -> int:
+    total = 0
+    for it in bundle_items:
+        prod = PRODUCT_BY_ID.get(it["asahi_id"])
+        if not prod:
+            continue
+        seller = pick_seller(prod, it.get("seller_preference", "any"))
+        price = offer_price(prod, seller)
+        total += price * int(it.get("qty", 1))
+    return int(total)
+
+def render_bundle_cards(bundle_items: list[dict]):
+    st.markdown("#### 🛍️ バンドル内容（購入リンク）")
+    for bi in bundle_items:
+        prod = PRODUCT_BY_ID[bi["asahi_id"]]
+        qty = int(bi["qty"])
+        reason = bi.get("reason", "")
+
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown(f"**{prod['name_ja']}** × {qty}")
+        if reason:
+            st.markdown(f"<div class='small'>理由: {reason}</div>", unsafe_allow_html=True)
+
+        amz_p = offer_price(prod, "amazon")
+        rak_p = offer_price(prod, "rakuten")
+        loh_p = offer_price(prod, "lohaco")
+
+        amz_url = prod["offers"]["amazon"]["url"]
+        rak_url = prod["offers"]["rakuten"]["url"]
+        loh_url = prod["offers"]["lohaco"]["url"]
+
+        st.markdown(
+            f"""
+            <div style="margin-top:6px">
+              <a class="badge-link badge-amz" href="{amz_url}" target="_blank" rel="noopener noreferrer">
+                Amazon <span>{yen(amz_p)}</span>
+              </a>
+              <a class="badge-link badge-rak" href="{rak_url}" target="_blank" rel="noopener noreferrer">
+                Rakuten <span>{yen(rak_p)}</span>
+              </a>
+              <a class="badge-link badge-loh" href="{loh_url}" target="_blank" rel="noopener noreferrer">
+                LOHACO <span>{yen(loh_p)}</span>
+              </a>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
 def handle_llm_out(out: dict):
     st.session_state["llm_out"] = out
 
     plan = out.get("plan", {}) or {}
-    bundle_items = plan.get("bundle_items", []) or []
+    bundles = plan.get("bundles", []) or []
 
     # Only consider questions we still need answers for
     qs = [q for q in out.get("questions", []) if q["id"] not in st.session_state["answers"]]
@@ -378,7 +436,6 @@ def handle_llm_out(out: dict):
             next_q = q
             break
 
-    # If we still have a new question to ask
     if next_q:
         st.session_state["pending_q"] = next_q
         st.session_state["asked_qids"].add(next_q["id"])
@@ -386,16 +443,21 @@ def handle_llm_out(out: dict):
         st.session_state["messages"].append({"role": "assistant", "content": next_q["question"]})
         return
 
-    # Otherwise: show plan (even if model keeps returning questions)
+    # Plan ready
     st.session_state["pending_q"] = None
     st.session_state["stage"] = "plan_ready"
     st.session_state["plan_cache"] = plan
-    st.session_state["bundle_cache"] = bundle_items
+    st.session_state["bundles_cache"] = bundles
 
-    if plan:
+    # Default selected bundle if not set / invalid
+    valid_ids = {b.get("id") for b in bundles if isinstance(b, dict)}
+    if st.session_state.get("selected_bundle_id") not in valid_ids:
+        st.session_state["selected_bundle_id"] = "mid" if "mid" in valid_ids else (next(iter(valid_ids)) if valid_ids else "mid")
+
+    if plan and bundles:
         st.session_state["messages"].append({
             "role": "assistant",
-            "content": render_plan_bubble(plan, bundle_items),
+            "content": render_plan_bubble(plan, bundles),
         })
     else:
         st.session_state["messages"].append({
@@ -438,8 +500,7 @@ def render_typing_bubble(text="考え中..."):
             """,
             unsafe_allow_html=True,
         )
-
-def render_plan_bubble(plan: dict, bundle_items: list[dict]) -> str:
+def render_plan_bubble(plan: dict, bundles: list[dict]) -> str:
     title = plan.get("title", "")
     assumptions = plan.get("assumptions", [])
     note = plan.get("note", "")
@@ -451,14 +512,15 @@ def render_plan_bubble(plan: dict, bundle_items: list[dict]) -> str:
     if note:
         lines.append(f"\n_{note}_")
 
-    # Bundle summary (keep it short — details below)
-    lines.append("\n**おすすめなバンダル**")
-    for bi in bundle_items:
-        prod = PRODUCT_BY_ID[bi["asahi_id"]]
-        qty = int(bi["qty"])
-        reason = bi.get("reason", "")
-        lines.append(f"- **{prod['name_ja']}** × {qty}  \n  <span class='small'>理由: {reason}</span>")
+    lines.append("\n**おすすめの3プラン（価格帯別）**")
+    for b in bundles:
+        bid = b.get("id", "")
+        label = b.get("label", "")
+        concept = b.get("concept", "")
+        emoji = {"low": "🟢", "mid": "🟡", "high": "🟣"}.get(bid, "✅")
+        lines.append(f"- {emoji} **{label}**（{bid}）: {concept}")
 
+    lines.append("\n下の選択肢から1つ選ぶと、購入リンク（Amazon/Rakuten/LOHACO）を表示します。")
     return "\n".join(lines)
 
 # compact catalog grounding (small list)
@@ -471,6 +533,8 @@ CATALOG_GROUNDING = "\n".join(CATALOG_LINES)
 # LLM Schema (strict)
 # -----------------------------
 QUESTION_ID_ENUM = ["budget_jpy", "delivery_by", "alcohol_ratio", "days_count", "focus"]  # keep simple
+
+BUNDLE_ID_ENUM = ["low", "mid", "high"]
 
 PLAN_SCHEMA = {
   "type": "object",
@@ -485,9 +549,9 @@ PLAN_SCHEMA = {
           "question": {"type": "string", "maxLength": 140},
           "type": {"type": "string", "enum": ["choice", "number", "date"]},
           "options": {"type": "array", "items": {"type": "string", "maxLength": 40}, "maxItems": 8},
-          "default": {"type": ["string","integer","null"]}
+          "default": {"type": ["string", "integer", "null"]}
         },
-        "required": ["id","question","type","options","default"],
+        "required": ["id", "question", "type", "options", "default"],
         "additionalProperties": False
       }
     },
@@ -496,29 +560,44 @@ PLAN_SCHEMA = {
       "properties": {
         "title": {"type": "string", "maxLength": 80},
         "assumptions": {"type": "array", "items": {"type": "string", "maxLength": 160}, "maxItems": 10},
-        "bundle_items": {
+        "bundles": {
           "type": "array",
-          "minItems": 1,
-          "maxItems": 6,
+          "minItems": 3,
+          "maxItems": 3,
           "items": {
             "type": "object",
             "properties": {
-              "asahi_id": {"type": "string", "enum": ASAHI_IDS},
-              "qty": {"type": "integer", "minimum": 1, "maximum": 20},
-              "seller_preference": {"type": "string", "enum": ["amazon", "rakuten", "lohaco", "any"]},
-              "reason": {"type": "string", "maxLength": 120}
+              "id": {"type": "string", "enum": BUNDLE_ID_ENUM},
+              "label": {"type": "string", "maxLength": 40},
+              "concept": {"type": "string", "maxLength": 120},
+              "bundle_items": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 6,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "asahi_id": {"type": "string", "enum": ASAHI_IDS},
+                    "qty": {"type": "integer", "minimum": 1, "maximum": 20},
+                    "seller_preference": {"type": "string", "enum": ["amazon", "rakuten", "lohaco", "any"]},
+                    "reason": {"type": "string", "maxLength": 120}
+                  },
+                  "required": ["asahi_id", "qty", "seller_preference", "reason"],
+                  "additionalProperties": False
+                }
+              }
             },
-            "required": ["asahi_id","qty","seller_preference","reason"],
+            "required": ["id", "label", "concept", "bundle_items"],
             "additionalProperties": False
           }
         },
         "note": {"type": "string", "maxLength": 220}
       },
-      "required": ["title","assumptions","bundle_items","note"],
+      "required": ["title", "assumptions", "bundles", "note"],
       "additionalProperties": False
     }
   },
-  "required": ["questions","plan"],
+  "required": ["questions", "plan"],
   "additionalProperties": False
 }
 
@@ -533,6 +612,10 @@ SYSTEM_PROMPT = f"""
 - 選べる商品は asahi_id の一覧のみ。それ以外は絶対に出さない。
 - party の場合は「人数→本数の計算式」を assumptions に1行含める（例：30人×2本=60本）。
 - お酒が含まれる場合、note に「飲酒は20歳以上」を一言入れる。
+- 最終出力は必ず bundles を3つ（low/mid/high）返す。
+- low はコスパ重視、mid はバランス、high はプレミアム（少し良い/多様性）にする。
+- 3つの bundles は、少なくとも1つ以上の商品 or 数量が違うようにする。
+- 質問は最大2つ。価格帯（low/mid/high）は質問せず、ユーザーがUIで選べる前提で bundles を作る。
 """
 
 def llm_make_plan(conversation: list[str], answers: dict):
@@ -562,14 +645,12 @@ with st.sidebar:
         st.session_state["conversation"] = ["30人でパーティーをします。ビールなどはOK。予算と到着日も考慮して提案して。"]
         st.session_state["answers"] = {}
         st.session_state["llm_out"] = None
-        st.session_state["confirmed"] = False
         st.rerun()
 
     if st.button("例：アマノフーズのストック"):
         st.session_state["conversation"] = ["アマノフーズで平日ランチのストックをしたい。買い忘れない組み合わせで提案して。"]
         st.session_state["answers"] = {}
         st.session_state["llm_out"] = None
-        st.session_state["confirmed"] = False
         st.rerun()
 
     st.divider()
@@ -624,8 +705,38 @@ if prompt:
     st.rerun()
 
 # Put “bundle cards + clickable badges” inside the assistant plan turn
-if st.session_state["stage"] == "plan_ready" and st.session_state["bundle_cache"]:
+if st.session_state["stage"] == "plan_ready" and st.session_state.get("bundles_cache"):
+    bundles = st.session_state["bundles_cache"]
+
+    # Build radio labels with estimated totals
+    id_to_bundle = {b["id"]: b for b in bundles}
+    options = []
+    labels = {}
+    for b in bundles:
+        bid = b["id"]
+        total = bundle_est_total_jpy(b["bundle_items"])
+        label = f"{b['label']}（目安 合計: {yen(total)}）"
+        options.append(bid)
+        labels[bid] = label
+
     with st.chat_message("assistant"):
+        st.markdown("どの価格帯で用意しますか？（あとから切り替え可能）")
+
+        chosen = st.radio(
+            "プランを選択",
+            options=options,
+            index=options.index(st.session_state.get("selected_bundle_id", "mid")) if st.session_state.get("selected_bundle_id", "mid") in options else 0,
+            format_func=lambda x: labels.get(x, x),
+        )
+        st.session_state["selected_bundle_id"] = chosen
+
+        selected_bundle = id_to_bundle[chosen]
+        bundle_items = selected_bundle["bundle_items"]
+
+        # Show EC cards + badges (back!)
+        render_bundle_cards(bundle_items)
+
+        st.markdown("---")
         st.markdown("よろしければ、Amazon カートを今すぐ準備できます。")
 
         now = time.time()
@@ -633,73 +744,67 @@ if st.session_state["stage"] == "plan_ready" and st.session_state["bundle_cache"
         in_cooldown = now < cooldown_until
         in_progress = bool(st.session_state.get("cart_in_progress", False))
 
-        # Button (disabled during cooldown / progress)
         clicked = st.button(
             "🛒 Amazonカートを準備する",
             type="primary",
             disabled=(in_cooldown or in_progress),
         )
 
-        # --- On click: start the job + set cooldown ---
         if clicked:
             st.session_state["cart_last_error"] = None
             st.session_state["cart_in_progress"] = True
             st.session_state["cart_started_at"] = time.time()
-            st.session_state["cart_cooldown_until"] = time.time() + 60  # 60 sec lock
+            st.session_state["cart_cooldown_until"] = time.time() + 60
 
-            # build ASIN list
-            asins = []
-            for it in st.session_state["bundle_cache"][:MAX_CART_ITEMS]:
+            from collections import defaultdict
+
+            # build ASIN+qty list from selected bundle
+            qty_by_asin = defaultdict(int)
+
+            for it in bundle_items[:MAX_CART_ITEMS]:
                 prod = PRODUCT_BY_ID.get(it["asahi_id"])
-                if prod:
-                    asin = prod["offers"]["amazon"].get("asin")
-                    if asin:
-                        asins.append(asin)
+                if not prod:
+                    continue
+                asin = prod["offers"]["amazon"].get("asin")
+                if not asin:
+                    continue
+                qty_by_asin[asin] += int(it.get("qty", 1))
+
+            items = [{"asin": asin, "qty": qty} for asin, qty in qty_by_asin.items()]
 
             try:
                 cmd = [
                     "python",
                     str(BASE / "amazon_cart_bot.py"),
-                    "--asins", json.dumps(asins, ensure_ascii=False),
+                    "--items", json.dumps(items, ensure_ascii=False),
                     "--profile", str(BASE / "pw_amazon_profile"),
                     "--keep_open",
                 ]
                 log_path = BASE / "cart_bot.log"
                 with open(log_path, "a", encoding="utf-8") as f:
                     subprocess.Popen(cmd, stdout=f, stderr=f)
-
                 st.session_state["cart_started"] = True
-
             except Exception as e:
                 st.session_state["cart_last_error"] = str(e)
                 st.session_state["cart_in_progress"] = False
 
-        # --- Status UI (ALWAYS rendered under the button) ---
         if st.session_state.get("cart_last_error"):
             st.error("カート準備の起動に失敗しました。cart_bot.log を確認してください。")
             st.code(st.session_state["cart_last_error"])
 
-        # If we just started, keep user here for a few seconds with a progress animation
         if st.session_state.get("cart_in_progress"):
             st.info("準備を開始しました。数秒だけこの画面のままでお待ちください…")
             prog = st.progress(0)
-
-            # A short “busy” animation (keeps user engaged)
-            # NOTE: This does NOT guarantee Amazon is finished; it’s just UX guidance.
-            for i in range(30):  # ~3 seconds
+            for i in range(30):
                 time.sleep(0.1)
                 prog.progress((i + 1) / 30)
-
             st.session_state["cart_in_progress"] = False
-
             st.success("✅ そろそろ Chrome ウィンドウに切り替えて、Amazonカートをご確認ください。")
             st.caption("（環境によっては表示にもう少し時間がかかる場合があります）")
 
-        # Cooldown hint
         if in_cooldown and not st.session_state.get("cart_in_progress"):
             remaining = int(max(0, cooldown_until - time.time()))
             st.caption(f"※ 連打防止のため、あと {remaining} 秒は再実行できません。")
-
 
 if st.session_state["stage"] == "waiting_answer" and st.session_state["pending_q"]:
     q = st.session_state["pending_q"]
@@ -723,7 +828,7 @@ if st.session_state["stage"] == "waiting_answer" and st.session_state["pending_q
         elif qtype == "number":
             dv = int(default) if isinstance(default, int) else 0
             val = st.number_input(
-                "Enter a number",
+                "数値を入力してください",
                 min_value=0,
                 value=dv,
                 step=100,
@@ -732,17 +837,17 @@ if st.session_state["stage"] == "waiting_answer" and st.session_state["pending_q
             val = int(val)
         else:  # date
             today = datetime.now().date()
-            picked = st.date_input("Pick a date", value=today, key=f"active_q_{qid}")
+            picked = st.date_input("日にちを指定してください", value=today, key=f"active_q_{qid}")
             val = str(picked)
 
-        # Optional quick-replies (chips) for choice
-        if qtype == "choice" and opts:
-            st.markdown("<div class='small'>Quick replies:</div>", unsafe_allow_html=True)
-            cols = st.columns(min(4, len(opts)))
-            for i, opt in enumerate(opts[:4]):
-                if cols[i].button(opt, key=f"chip_{qid}_{i}"):
-                    st.session_state[f"active_q_{qid}"] = opt
-                    st.rerun()
+        # # Optional quick-replies (chips) for choice
+        # if qtype == "choice" and opts:
+        #     st.markdown("<div class='small'></div>", unsafe_allow_html=True)
+        #     cols = st.columns(min(4, len(opts)))
+        #     for i, opt in enumerate(opts[:4]):
+        #         if cols[i].button(opt, key=f"chip_{qid}_{i}"):
+        #             st.session_state[f"active_q_{qid}"] = opt
+        #             st.rerun()
 
         if st.button("送信", type="primary", key=f"submit_{qid}"):
             st.session_state["answers"][qid] = val
@@ -752,49 +857,3 @@ if st.session_state["stage"] == "waiting_answer" and st.session_state["pending_q
             st.session_state["pending_action"] = {"kind": "answer", "qid": qid}
             st.session_state["thinking"] = True
             st.rerun()
-
-
-if st.session_state["confirmed"]:
-    asins = []
-    for it in bundle_items[:MAX_CART_ITEMS]:
-        prod = PRODUCT_BY_ID.get(it["asahi_id"])
-        if prod:
-            asin = prod["offers"]["amazon"].get("asin")
-            if asin:
-                asins.append(asin)
-
-    if not asins:
-        st.warning("No Amazon ASINs found in the current bundle.")
-    else:
-        colA, colB = st.columns([0.35, 0.65])
-        with colA:
-            if st.button("🛒 バンドルをAmazonカートに追加（Playwright）", type="primary"):
-                cmd = [
-                    "python",
-                    str(BASE / "amazon_cart_bot.py"),
-                    "--asins",
-                    json.dumps(asins, ensure_ascii=False),
-                    "--profile",
-                    str(BASE / "pw_amazon_profile"),
-                    "--keep_open",
-                ]
-                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                log_path = BASE / "cart_bot.log"
-                with open(log_path, "a", encoding="utf-8") as f:
-                    subprocess.Popen(cmd, stdout=f, stderr=f)
-                st.success("カートの準備を開始しました。終了した場合は、cart_bot.log を開いて理由を確認してください。")
-                st.code(str(log_path))
-
-                # record a state so we can show a “next step” panel
-                st.session_state["cart_started"] = True
-                st.success("Amazon カートの準備が Chrome ウィンドウで開始されました。")
-                st.rerun()
-
-        # with colB:
-            # st.caption("Demo flow: click → switch to Chrome window → cart is ready → come back here.")
-
-        if st.session_state.get("cart_started"):
-            st.info(
-                "✅ 次のステップ: 開いた **Chrome ウィンドウ** に切り替えて、**Amazon カート** 内の商品を確認し、 "
-                "その後、このページに戻って会話を続けてください。"
-            )
