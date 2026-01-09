@@ -820,7 +820,7 @@ if st.session_state["stage"] == "plan_ready" and st.session_state.get("bundles_c
 
           st.session_state["cart_in_progress"] = False
           st.success("そろそろ Chrome ウィンドウに切り替えて、Amazonカートをご確認ください。")
-          st.caption("（環境6人のパーティー。ビール中心。ート反映までさらに数秒かかる場合があります）")
+          st.caption("（環境によってはカートへ反映までさらに数秒かかる場合があります）")
 
         if in_cooldown and not st.session_state.get("cart_in_progress"):
             remaining = int(max(0, cooldown_until - time.time()))
