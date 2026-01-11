@@ -42,3 +42,6 @@ ENV/
 env/
 # ignore local settings
 local_settings.py
+
+# amazon runs
+pw_amazon_profile_runs/

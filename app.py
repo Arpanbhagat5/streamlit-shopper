@@ -359,6 +359,71 @@ PRODUCTS = CATALOG["products"]
 PRODUCT_BY_ID = {p["asahi_id"]: p for p in PRODUCTS}
 ASAHI_IDS = list(PRODUCT_BY_ID.keys())
 
+
+import re
+from datetime import date
+
+def text_has_budget(text: str) -> bool:
+    # catches "10000", "10,000円", "予算1万円"
+    if re.search(r"(予算|円|¥)", text):
+        return True
+    if re.search(r"\b\d{4,6}\b", text):  # 1000–999999-ish
+        return True
+    if re.search(r"\d+\s*万", text):
+        return True
+    return False
+
+def text_has_timeline(text: str) -> bool:
+    # loose checks: date-like or "今日/明日/来週/までに"
+    if re.search(r"\d{4}-\d{2}-\d{2}", text):
+        return True
+    if re.search(r"(今日|明日|明後日|今週|来週|週末|までに|届け|到着)", text):
+        return True
+    return False
+
+def text_mentions_alcohol_context(text: str) -> bool:
+    return re.search(r"(ビール|酒|お酒|飲み|宴会|パーティ|晩酌)", text) is not None
+
+def required_questions(conversation: list[str], answers: dict) -> list[dict]:
+    joined = "\n".join(conversation)
+
+    req = []
+
+    # 1) budget
+    if "budget_jpy" not in answers and not text_has_budget(joined):
+        req.append({
+            "id": "budget_jpy",
+            "question": "ご予算はどれくらいですか？（例：10000円 / 1万円）",
+            "type": "number",
+            "options": [],
+            "default": 10000
+        })
+
+    # 2) delivery
+    if "delivery_by" not in answers and not text_has_timeline(joined):
+        # default = today-ish (you can set to today+3)
+        req.append({
+            "id": "delivery_by",
+            "question": "いつまでに必要ですか？（到着希望日）",
+            "type": "date",
+            "options": [],
+            "default": None
+        })
+
+    # 3) alcohol ratio only if context suggests it
+    if text_mentions_alcohol_context(joined) and "alcohol_ratio" not in answers:
+        req.append({
+            "id": "alcohol_ratio",
+            "question": "アルコールとノンアルの割合はどうしますか？",
+            "type": "choice",
+            "options": ["アルコール多め", "半々", "ノンアル多め", "ノンアルのみ"],
+            "default": "半々"
+        })
+
+    # keep to max 2 at a time (your current UX rule)
+    return req[:2]
+
+
 def yen(x: int) -> str:
     return f"¥{x:,}"
 
@@ -439,6 +504,18 @@ def render_bundle_cards(bundle_items: list[dict]):
 def handle_llm_out(out: dict):
     st.session_state["llm_out"] = out
 
+    # 1) enforce required questions first
+    enforced = required_questions(st.session_state["conversation"], st.session_state["answers"])
+    if enforced:
+        # pick first not yet asked
+        for q in enforced:
+            if q["id"] not in st.session_state["asked_qids"]:
+                st.session_state["pending_q"] = q
+                st.session_state["asked_qids"].add(q["id"])
+                st.session_state["stage"] = "waiting_answer"
+                st.session_state["messages"].append({"role": "assistant", "content": q["question"]})
+                return
+    # 2) else proceed to plan
     plan = out.get("plan", {}) or {}
     bundles = plan.get("bundles", []) or []
 
