@@ -1,17 +1,23 @@
 # =============================
 # DROP-IN REPLACEMENT v4 (LLM + UI) — COMPLETE / SINGLE FILE
 # =============================
-# Keeps what works from v3:
-# - asahi_catalog.json load
-# - OpenAI Responses API with JSON schema
-# - bundles + product cards + seller links + price calc + optional og:image fetch
-# - promo + popular uses + quickstart (personal/business)
+# Keeps:
+# - asahi_catalog.json loading
+# - OpenAI Responses API w/ JSON schema output
+# - Bundles + product cards + seller price badges + optional og:image fetch
+# - Promo panel + (optional) auto rotate
+# - Left hub: 人気の使い方 + クイックスタート (personal/business)
 # Fixes:
-# - RecursionError in ss_init (no self-calls)
-# - Duplicate UI / repeated panels during thinking
-# - "Calling st.rerun() within a callback is a no-op." (remove rerun from callbacks)
-# - History-safe bundles + suggestions per assistant turn
-# - LLM can return bundles=[] when intent is unclear (gift etc.) and asks 1 question
+# - NO duplicated chat rendering
+# - NO st.rerun() inside callbacks (removes "no-op" toast)
+# - NO blank screen during LLM call (renders UI first, then calls LLM)
+# - Auto-rotate paused while "thinking" (prevents duplicate panels)
+# - Bundles not forced every response; clarifies on intent switches (gift etc.)
+#
+# Requirements:
+#   pip install openai streamlit requests
+# Optional for auto-rotate:
+#   pip install streamlit-autorefresh
 
 from __future__ import annotations
 
@@ -47,6 +53,7 @@ except Exception:
 st.set_page_config(page_title="Asahi Group AIショッパー（デモ）", page_icon="🛒", layout="wide")
 
 client = OpenAI()
+
 BASE = Path(__file__).resolve().parent
 CATALOG_PATH = BASE / "asahi_catalog.json"
 
@@ -55,7 +62,7 @@ TODAY = datetime.now().strftime("%Y-%m-%d")
 
 
 # -----------------------------
-# CSS
+# CSS (LIGHT + button overrides + layout)
 # -----------------------------
 st.markdown(
     """
@@ -63,21 +70,19 @@ st.markdown(
 :root { color-scheme: light; }
 html, body { background:#ffffff !important; color:#111827 !important; }
 .stApp, div[data-testid="stAppViewContainer"], div[data-testid="stMain"], div[data-testid="stMainBlockContainer"]{
-  background:#ffffff !important;
-  color:#111827 !important;
+  background:#ffffff !important; color:#111827 !important;
 }
 header[data-testid="stHeader"], div[data-testid="stToolbar"], div[data-testid="stDecoration"]{
-  background:#ffffff !important;
-  color:#111827 !important;
+  background:#ffffff !important; color:#111827 !important;
   border-bottom:1px solid rgba(17,24,39,0.10) !important;
 }
 div[data-testid="stBottom"], div[data-testid="stBottomBlockContainer"]{
   background:#ffffff !important;
   border-top:1px solid rgba(17,24,39,0.10) !important;
 }
-
 [data-testid="stMarkdownContainer"], .stCaption, .stCaption p { color:#111827 !important; }
 
+/* Text input */
 div[data-testid="stTextInput"] input{
   background:#ffffff !important;
   color:#111827 !important;
@@ -90,10 +95,13 @@ div[data-testid="stTextInput"] input::placeholder{
   color: rgba(17,24,39,0.45) !important;
 }
 
-/* Buttons: kill dark pills across versions */
+/* HARD button overrides */
 div[data-testid="stButton"] button,
 div[data-testid^="baseButton-"] button,
 button[kind],
+button[kind="primary"],
+button[kind="secondary"],
+button[kind="tertiary"],
 button {
   background: #ffffff !important;
   color: #111827 !important;
@@ -104,10 +112,7 @@ button {
 }
 div[data-testid="stButton"] button * ,
 div[data-testid^="baseButton-"] button * ,
-button * {
-  color: inherit !important;
-  fill: currentColor !important;
-}
+button[kind] * , button * { color: inherit !important; fill: currentColor !important; }
 div[data-testid="stButton"] button:hover,
 div[data-testid^="baseButton-"] button:hover,
 button:hover{
@@ -116,20 +121,65 @@ button:hover{
   transform: translateY(-1px);
 }
 
-/* Promo arrows */
-.promo-nav div[data-testid="stButton"] button{
+/* Promo arrows: small square */
+.promo-nav div[data-testid="stButton"] button,
+.promo-nav div[data-testid^="baseButton-"] button,
+.promo-nav button{
   border-radius: 12px !important;
   padding: 8px 10px !important;
 }
 
-/* Chips */
+/* Chips: tighter */
 .chips-tight div[data-testid="stButton"] button{
   padding: 8px 12px !important;
   font-weight: 700 !important;
   white-space: nowrap !important;
 }
 
-/* Promo card */
+/* Cards */
+.bundle-shell{
+  border: 1px solid rgba(17,24,39,0.10);
+  border-radius: 16px;
+  padding: 12px;
+  background: #ffffff;
+  box-shadow: 0 10px 22px rgba(17,24,39,0.06);
+  margin-top: 12px;
+}
+.bundle-grid{ display:flex; flex-direction:column; gap:10px; }
+.prod-card{
+  display:flex; gap:12px;
+  border:1px solid rgba(17,24,39,0.10);
+  border-radius:14px;
+  padding:10px;
+  background:#ffffff;
+  box-shadow: 0 10px 22px rgba(17,24,39,0.05);
+}
+.prod-img{
+  width:84px; height:84px;
+  border-radius:12px;
+  object-fit:cover;
+  border:1px solid rgba(17,24,39,0.10);
+  background:#F3F4F6;
+}
+.prod-meta{ flex:1; min-width:0; }
+.prod-title{ font-weight:900; font-size:14px; margin-bottom:2px; }
+.prod-sub{ font-size:12px; color: rgba(17,24,39,0.70); margin-bottom:4px; }
+.prod-reason{ font-size:12px; color: rgba(17,24,39,0.70); margin-bottom:8px; }
+.prod-links{ display:flex; flex-wrap:wrap; gap:8px; }
+.badge-link{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:3px 10px;
+  border-radius:999px;
+  border:1px solid rgba(0,0,0,0.14);
+  text-decoration:none !important;
+  font-size:12px;
+  font-weight:600;
+  color:#111827 !important;
+  line-height:1.6;
+  background:#F9FAFB;
+}
+
+/* Promo */
 .promo-card {
   border-radius: 22px;
   padding: 18px;
@@ -162,7 +212,7 @@ button:hover{
   border: 1px solid rgba(0,0,0,0.15);
 }
 
-/* Hub cards */
+/* Left Hub */
 .hub-card{
   border: 1px solid rgba(17,24,39,0.10);
   border-radius: 16px;
@@ -173,64 +223,15 @@ button:hover{
 }
 .hub-title{ font-weight: 900; font-size: 14px; margin-bottom: 8px; }
 .kbd{
-  font-size:12px;
-  padding: 2px 8px;
+  font-size:12px; padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid rgba(17,24,39,0.18);
   background: #F9FAFB;
   color: rgba(17,24,39,0.75);
 }
 
-/* Bundle shell + product cards */
-.bundle-shell{
-  border: 1px solid rgba(17,24,39,0.10);
-  border-radius: 16px;
-  padding: 12px;
-  background: #ffffff;
-  box-shadow: 0 10px 22px rgba(17,24,39,0.06);
-  margin-top: 12px;
-}
-.bundle-grid{ display:flex; flex-direction:column; gap:10px; }
-.prod-card{
-  display:flex; gap:12px;
-  border:1px solid rgba(17,24,39,0.10);
-  border-radius:14px;
-  padding:10px;
-  background:#ffffff;
-  box-shadow: 0 10px 22px rgba(17,24,39,0.05);
-}
-.prod-img{
-  width:84px; height:84px;
-  border-radius:12px;
-  object-fit:cover;
-  border:1px solid rgba(17,24,39,0.10);
-  background:#F3F4F6;
-}
-.prod-meta{ flex:1; min-width:0; }
-.prod-title{ font-weight:900; font-size:14px; margin-bottom:2px; }
-.prod-sub{ font-size:12px; color: rgba(17,24,39,0.70); margin-bottom:4px; }
-.prod-reason{ font-size:12px; color: rgba(17,24,39,0.70); margin-bottom:8px; }
-.prod-links{ display:flex; flex-wrap:wrap; gap:8px; }
-.badge-link{
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  padding:3px 10px;
-  border-radius:999px;
-  border:1px solid rgba(0,0,0,0.14);
-  text-decoration:none !important;
-  font-size:12px;
-  font-weight:600;
-  color:#111827 !important;
-  line-height:1.6;
-  background:#F9FAFB;
-}
-
-/* Typing */
-.typing {
-  display:inline-flex; align-items:center; gap:8px;
-  font-size:13px; color: rgba(17,24,39,0.65);
-}
+/* Typing animation */
+.typing { display:inline-flex; align-items:center; gap:8px; font-size:13px; color: rgba(17,24,39,0.65); }
 .typing .dots { display:inline-flex; gap:5px; }
 .typing .dot{
   width:7px; height:7px; border-radius:999px;
@@ -243,18 +244,35 @@ button:hover{
   0%, 80%, 100% { opacity:0.2; transform: translateY(0); }
   40% { opacity:1; transform: translateY(-2px); }
 }
-
-/* Sticky left column (optional) */
-.sticky-left {
-  position: sticky;
-  top: 4.2rem; /* below Streamlit header */
-  align-self: flex-start;
-}
 </style>
 """,
     unsafe_allow_html=True,
 )
 
+
+st.markdown(
+    """
+<style>
+/* Sticky left wrapper */
+.sticky-left{
+  position: sticky;
+  top: 64px;
+  max-height: calc(100vh - 80px); /* use max-height (safer than fixed height) */
+  overflow-y: auto;
+  align-self: flex-start;
+  z-index: 5;
+  background: #ffffff;
+  width: 100%;
+}
+
+/* IMPORTANT: only the row that contains .sticky-left should top-align */
+div[data-testid="stHorizontalBlock"]:has(.sticky-left){
+  align-items: flex-start !important;
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
 # -----------------------------
 # Session State (NO recursion)
@@ -264,17 +282,15 @@ def ss_init(key: str, default: Any):
         st.session_state[key] = default
 
 
-ss_init("messages", [])                 # list[{role, content, turn_id?, bundles?, suggested_replies?}]
+ss_init("messages", [])  # each msg: {role, content, turn_id?, bundles?, suggested_replies?}
 ss_init("welcome_shown", False)
 ss_init("thinking", False)
 ss_init("pending_action", None)
-ss_init("prompt_draft", "")
 ss_init("prefill_prompt", "")
 ss_init("selected_bundle_id", "mid")
-ss_init("promo_auto", True)
 ss_init("promo_i", 0)
-ss_init("turn_i", 0)                    # increments per assistant response
-ss_init("promo_tick_last", 0)           # for st_autorefresh counter tracking
+ss_init("promo_auto", True)
+ss_init("turn_i", 0)
 
 
 # -----------------------------
@@ -323,30 +339,38 @@ QUICKSTART_BUSINESS = [
 
 
 # -----------------------------
-# Promo
+# Promo panel
 # -----------------------------
 PROMOS = [
-    {"kicker": "ASAHI", "title": "Free Delivery", "copy": "On orders over ¥5,000. Get it delivered fresh.", "cta": "Order Now", "foot": "Demo promo panel (static content)."},
+    {"kicker": "ASAHI", "title": "Free Delivery", "copy": "On orders over ¥5,000. Get it delivered fresh.", "cta": "Order Now", "foot": "Demo promo panel (static)."},
     {"kicker": "SUPER DRY", "title": "Crisp & Clean", "copy": "A sharp finish that pairs well with food.", "cta": "Explore", "foot": "Later: fetch from real campaign feed."},
-    {"kicker": "NON-ALC", "title": "0.00% Options", "copy": "Great taste without alcohol—perfect for mixed bundles.", "cta": "See lineup", "foot": "Demo promo panel (static content)."},
+    {"kicker": "NON-ALC", "title": "0.00% Options", "copy": "Great taste without alcohol—perfect for mixed bundles.", "cta": "See lineup", "foot": "Demo promo panel (static)."},
 ]
 
 
-def render_promo_panel():
-    # Auto rotate: disable while thinking to avoid weird intermediate states
-    col_a, col_b = st.columns([0.55, 0.45])
-    with col_a:
-        st.session_state["promo_auto"] = st.toggle("Auto rotate", value=bool(st.session_state["promo_auto"]), key="promo_auto_toggle")
-    with col_b:
-        if st.session_state["promo_auto"] and st_autorefresh is None:
-            st.caption("※ auto-rotate を使うなら `pip install streamlit-autorefresh`")
+def queue_user_message(text: str):
+    text = (text or "").strip()
+    if not text:
+        return
+    st.session_state["messages"].append({"role": "user", "content": text})
+    st.session_state["pending_action"] = {"kind": "user_prompt"}
+    st.session_state["thinking"] = True
 
-    if st.session_state["promo_auto"] and (st_autorefresh is not None) and (not st.session_state["thinking"]):
-        tick = st_autorefresh(interval=3500, key="promo_refresh_tick")
-        # tick is an int counter; only update promo_i when it changes
-        if isinstance(tick, int) and tick != int(st.session_state["promo_tick_last"]):
-            st.session_state["promo_tick_last"] = tick
-            st.session_state["promo_i"] = tick % len(PROMOS)
+
+def render_promo_panel():
+    # Pause autorefresh while thinking/pending (prevents duplicate panels / blank moments)
+    is_busy = bool(st.session_state.get("thinking")) or bool(st.session_state.get("pending_action"))
+
+    c_auto, c_info = st.columns([0.55, 0.45])
+    with c_auto:
+        st.session_state["promo_auto"] = st.toggle("オートプレイ", value=bool(st.session_state["promo_auto"]))
+    with c_info:
+        if st.session_state["promo_auto"] and st_autorefresh is None:
+            st.caption("※ auto-rotate: `pip install streamlit-autorefresh`")
+
+    if (not is_busy) and st.session_state["promo_auto"] and st_autorefresh is not None:
+        st_autorefresh(interval=3500, key="promo_refresh_v4")
+        st.session_state["promo_i"] = (int(st.session_state["promo_i"]) + 1) % len(PROMOS)
 
     p = PROMOS[int(st.session_state["promo_i"]) % len(PROMOS)]
     st.markdown(
@@ -366,24 +390,22 @@ def render_promo_panel():
 
     st.markdown("<div class='promo-nav'>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    # NO st.rerun() here — Streamlit reruns automatically on click
-    if c1.button("◀", key="promo_prev"):
+    if c1.button("◀"):
         st.session_state["promo_i"] = (int(st.session_state["promo_i"]) - 1) % len(PROMOS)
-        st.session_state["promo_tick_last"] = int(st.session_state["promo_tick_last"]) + 1
-    if c2.button("▶", key="promo_next"):
+    if c2.button("▶"):
         st.session_state["promo_i"] = (int(st.session_state["promo_i"]) + 1) % len(PROMOS)
-        st.session_state["promo_tick_last"] = int(st.session_state["promo_tick_last"]) + 1
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_left_hub():
     st.markdown("<div class='hub-card'>", unsafe_allow_html=True)
     st.markdown("<div class='hub-title'>人気の使い方</div>", unsafe_allow_html=True)
+
     for i, (name, cnt, prompt) in enumerate(POPULAR_USES):
         c1, c2 = st.columns([0.78, 0.22])
         with c1:
             if st.button(name, key=f"pop_use_{i}", use_container_width=True):
-                st.session_state["prefill_prompt"] = prompt
+                queue_user_message(prompt)
         with c2:
             st.markdown(
                 f"<div style='padding-top:10px; text-align:right;'><span class='kbd'>{cnt:,}</span></div>",
@@ -393,19 +415,22 @@ def render_left_hub():
 
     st.markdown("<div class='hub-card'>", unsafe_allow_html=True)
     st.markdown("<div class='hub-title'>クイックスタート</div>", unsafe_allow_html=True)
+
     tab1, tab2 = st.tabs(["個人向け", "ビジネス向け"])
     with tab1:
         cols = st.columns(2)
         for i, (label, prompt) in enumerate(QUICKSTART_PERSONAL):
             with cols[i % 2]:
                 if st.button(label, key=f"qs_p_{i}", use_container_width=True):
-                    st.session_state["prefill_prompt"] = prompt
+                    queue_user_message(prompt)
+
     with tab2:
         cols = st.columns(2)
         for i, (label, prompt) in enumerate(QUICKSTART_BUSINESS):
             with cols[i % 2]:
                 if st.button(label, key=f"qs_b_{i}", use_container_width=True):
-                    st.session_state["prefill_prompt"] = prompt
+                    queue_user_message(prompt)
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -456,34 +481,40 @@ CHAT_SCHEMA = {
 
 SYSTEM_PROMPT = f"""
 あなたはAsahi Groupの“AIショッパー”。
-口調は丁寧でフレンドリー。ユーザーの計画（パーティー/来客/ギフト/日常のストック/業務用途など）を一緒に作る「相談相手」。
+丁寧でフレンドリー。ユーザーの用途（パーティー/来客/BBQ/ギフト/日常ストック/業務用途など）に合わせて相談に乗る。
+
+会話方針:
+- 原則: 1ターンで「提案 +（必要なら）確認1つ」まで。質問攻めは禁止。
+- ユーザーが条件変更を示したが、具体値が無い場合は確認を1つだけして bundles=[]。
+- 条件が揃ったら bundles を 1〜3件返す（low/mid/high できれば）。
+- 価格はUI側で算出するため、文中で「最安」など断定はしない（“目安”“比較できます” はOK）。
 
 重要:
 - 会話はフォームではない。質問攻めにしない。
-- ユーザーが既に書いた情報（人数/予算/納期/用途）は繰り返し聞かない。
-- 不足があっても、まずは仮定して提案し、必要なら “最優先の質問を1つだけ” やんわり添える。
-- 「質問しないと進めない」動作は禁止。ただし、目的が切り替わった（例: ギフト）などで決定情報が不足している場合は
-  bundles を無理に出さず、bundles=[] にして意図確認を優先してよい。
+- ただし「用途が切り替わった」(例: パーティー→ギフト) など、意図が変わった可能性がある時は、
+  まず “確認の一問” を添えてから提案を出す（断定しない）。
+- bundles は **条件が揃っている時だけ** 出すこと。
+  例: ギフトなら「誰に/予算/好み(ビールorノンアル等)」が最低1-2個分からないと bundle を作らない。
+  その場合 bundles=[] にして、assistant_message_md で短く確認して suggested_replies で選択肢を出す。
+- 商品は asahi_id の一覧のみ。架空商品は禁止。
+- 酒類が含まれる場合は最後に一言だけ「飲酒は20歳以上」。
 
-bundles を出す基準:
-- ユーザーの用途が明確で、提案が成立する最低限が揃ったときだけ。
-- 例: ギフト → 受け取る相手（性別/年代/関係性）/予算/アルコール可否 が不明なら bundles=[] でOK。
 
-制約:
-- 提案できる商品は asahi_id の一覧のみ。それ以外は絶対に出さない。
-- 酒類が含まれる場合は最後に一言だけ「飲酒は20歳以上」を添える。
+
 
 出力:
-- assistant_message_md: 自然な会話文（短め 6〜10行）+ 次の一手
-- suggested_replies: 次に押しやすい短い返答（最大6）
-- bundles: 0〜3件（可能なら low/mid/high）。条件が薄い時は mid だけでもOK。
-- 商品の羅列は assistant_message_md に長々書かず、bundle UI に任せる。
+- assistant_message_md: 6〜10行程度、読みやすく。bundle の商品羅列はしない。
+- suggested_replies: 押しやすい短文（最大6）
+- bundles: 0〜3（可能なら low/mid/high）。条件が薄い時は 0 でもOK。
 - 今日の日付は {TODAY}（季節イベントが近ければ一言だけ雰囲気を添える）
 """
+# 「条件変更」系の発話（例: 予算を増やす/減らす、ノンアル多めにする、人数が変わる、納期が変わる、ギフトに切り替える）では、
+# いきなり新しい bundles を出さず、まずは短く確認してから次ターンで bundles を出す。
 
+# ただし、ユーザーが明確な数値を同じ発話で指定している場合（例:「予算2万円にして」）は、その場で bundles を更新してOK。
 
 def llm_chat(messages: list[dict]) -> dict:
-    # only role/content to the model
+    # Send only {role, content}
     context = messages[-16:] if len(messages) > 16 else messages
     context_clean = [{"role": m["role"], "content": m["content"]} for m in context]
 
@@ -528,7 +559,7 @@ def fetch_og_image(url: str) -> Optional[str]:
         return None
 
 
-def pick_seller(pref: str) -> str:
+def pick_seller(prod: dict, pref: str) -> str:
     return pref if pref in ("amazon", "rakuten", "lohaco") else "amazon"
 
 
@@ -539,9 +570,7 @@ def product_image_url(prod: dict, seller: str) -> Optional[str]:
     if img:
         return img
     url = prod.get("offers", {}).get(seller, {}).get("url")
-    if url:
-        return fetch_og_image(url)
-    return None
+    return fetch_og_image(url) if url else None
 
 
 def yen(x: int) -> str:
@@ -569,13 +598,14 @@ def bundle_est_total_jpy(bundle_items: list[dict]) -> int:
         prod = PRODUCT_BY_ID.get(it["asahi_id"])
         if not prod:
             continue
-        seller = pick_seller(it.get("seller_preference", "any"))
+        seller = pick_seller(prod, it.get("seller_preference", "any"))
         total += offer_price(prod, seller) * int(it.get("qty", 1))
     return int(total)
 
 
 def render_bundle_cards_with_images(bundle_items: list[dict]):
     st.markdown("<div class='bundle-grid'>", unsafe_allow_html=True)
+
     for bi in bundle_items:
         prod = PRODUCT_BY_ID.get(bi["asahi_id"])
         if not prod:
@@ -583,7 +613,7 @@ def render_bundle_cards_with_images(bundle_items: list[dict]):
 
         qty = int(bi.get("qty", 1))
         reason = bi.get("reason", "")
-        seller = pick_seller(bi.get("seller_preference", "any"))
+        seller = pick_seller(prod, bi.get("seller_preference", "any"))
 
         offers = prod.get("offers", {})
         amz_url = offers.get("amazon", {}).get("url", "#")
@@ -591,11 +621,12 @@ def render_bundle_cards_with_images(bundle_items: list[dict]):
         loh_url = offers.get("lohaco", {}).get("url", "#")
 
         img_url = product_image_url(prod, seller)
-        img_html = f"<img class='prod-img' src='{img_url}' />" if img_url else "<div class='prod-img ph'></div>"
 
         amz_p = offer_price(prod, "amazon")
         rak_p = offer_price(prod, "rakuten")
         loh_p = offer_price(prod, "lohaco")
+
+        img_html = f"<img class='prod-img' src='{img_url}' />" if img_url else "<div class='prod-img'></div>"
 
         st.markdown(
             f"""
@@ -615,11 +646,12 @@ def render_bundle_cards_with_images(bundle_items: list[dict]):
             """,
             unsafe_allow_html=True,
         )
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 # -----------------------------
-# Chat helpers (history-safe)
+# Chat state handlers
 # -----------------------------
 def last_assistant_turn() -> Optional[dict]:
     for m in reversed(st.session_state.get("messages", [])):
@@ -633,19 +665,14 @@ def handle_llm_chat_out(out: dict):
     bundles = out.get("bundles", []) or []
     suggested = out.get("suggested_replies", []) or []
 
-    st.session_state["turn_i"] = int(st.session_state["turn_i"]) + 1
-    turn_id = int(st.session_state["turn_i"])
+    st.session_state["turn_i"] = int(st.session_state.get("turn_i", 0)) + 1
+    turn_id = st.session_state["turn_i"]
 
     st.session_state["messages"].append(
-        {
-            "role": "assistant",
-            "content": msg,
-            "turn_id": turn_id,
-            "bundles": bundles,
-            "suggested_replies": suggested,
-        }
+        {"role": "assistant", "content": msg, "turn_id": turn_id, "bundles": bundles, "suggested_replies": suggested}
     )
 
+    # only affects latest interactive block
     bids = [b.get("id") for b in bundles if isinstance(b, dict)]
     if "mid" in bids:
         st.session_state["selected_bundle_id"] = "mid"
@@ -706,23 +733,6 @@ def render_bundles_block(bundles: list[dict], key_prefix: str, interactive: bool
 
 
 # -----------------------------
-# Actions (NO st.rerun in callbacks)
-# -----------------------------
-def set_prompt(text: str):
-    st.session_state["prompt_draft"] = text
-
-
-def send_prompt():
-    txt = (st.session_state.get("prompt_draft") or "").strip()
-    if not txt:
-        return
-    st.session_state["messages"].append({"role": "user", "content": txt})
-    st.session_state["pending_action"] = {"kind": "user_prompt"}
-    st.session_state["thinking"] = True
-    st.session_state["prompt_draft"] = ""
-
-
-# -----------------------------
 # Welcome
 # -----------------------------
 WELCOME_MD = (
@@ -736,54 +746,31 @@ if (not st.session_state["welcome_shown"]) and (len(st.session_state["messages"]
 
 
 # -----------------------------
-# If we have a pending LLM action, do it ONCE per run (prevents weird intermediate UI)
-# -----------------------------
-if st.session_state.get("pending_action"):
-    try:
-        with st.spinner("プランを作成中…"):
-            out = llm_chat(st.session_state["messages"])
-        handle_llm_chat_out(out)
-    except Exception as e:
-        st.session_state["messages"].append({"role": "assistant", "content": f"すみません、エラーが起きました: {e}", "bundles": [], "suggested_replies": []})
-    finally:
-        st.session_state["pending_action"] = None
-        st.session_state["thinking"] = False
-
-
-# -----------------------------
-# Layout (35/65 split)
+# Layout (35/65) + scroll containers A
 # -----------------------------
 left, right = st.columns([0.35, 0.65], gap="large")
 
 with left:
-    # Sticky wrapper (optional)
     st.markdown("<div class='sticky-left'>", unsafe_allow_html=True)
-    st.markdown("### Promo")
+
+    st.markdown("### おすすめ商品")
     render_promo_panel()
     render_left_hub()
     st.markdown("</div>", unsafe_allow_html=True)
 
 with right:
-    st.markdown("### Chat")
+    st.markdown("### Asahi コンシェルジュ")
     st.caption("💡 相談 → 提案 → プラン選択 → 購入リンク（デモ）")
 
-    # Apply prefill before input renders
-    prefill = st.session_state.pop("prefill_prompt", "")
-    if prefill:
-        set_prompt(prefill)
-
-    # Latest assistant = which turn is interactive
     latest_assistant = last_assistant_turn()
     latest_turn_id = latest_assistant.get("turn_id") if latest_assistant else None
 
-    # Render chat history (ONCE) + bundles inline
+    # render chat history
     for m in st.session_state["messages"]:
         role = m["role"]
         avatar = "🟡" if role == "assistant" else "🧑‍💼"
-
         with st.chat_message(role, avatar=avatar):
             st.markdown(m["content"])
-
             if role == "assistant" and m.get("bundles"):
                 is_latest = (m.get("turn_id") == latest_turn_id)
                 render_bundles_block(
@@ -792,46 +779,43 @@ with right:
                     interactive=is_latest,
                 )
 
-    # Thinking indicator (always bottom)
+    # typing indicator
     if st.session_state.get("thinking"):
         with st.chat_message("assistant", avatar="🟡"):
-            st.markdown(
-                """
-<div class="typing">
+            st.markdown("""<div class="typing">
   <span>考え中</span>
-  <span class="dots">
-    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-  </span>
-</div>
-""",
-                unsafe_allow_html=True,
-            )
+  <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+</div>""", unsafe_allow_html=True)
 
-    # Suggested replies from latest assistant
-    suggestions = (latest_assistant.get("suggested_replies", []) if latest_assistant else []) or [
-        "おすすめの使い方を教えて",
-        "ノンアル多めで組んで",
-        "予算は1万円くらい",
-        "今週末までに欲しい",
-        "ビール中心で",
-        "ビジネス向けに提案して",
-    ]
+    # chips (now submits)
+    suggestions = (latest_assistant.get("suggested_replies") if latest_assistant else None) or []
+    if not suggestions:
+        suggestions = [
+            "おすすめの使い方を教えて",
+            "ノンアル多めで組んで",
+            "予算は1万円くらい",
+            "今週末までに欲しい",
+            "ビール中心で",
+            "ビジネス向けに提案して",
+        ]
 
     st.markdown("<div class='chips-tight'>", unsafe_allow_html=True)
     cols = st.columns(min(6, len(suggestions)))
     for i, s in enumerate(suggestions[:6]):
         with cols[i]:
             if st.button(s, key=f"dyn_chip_{latest_turn_id}_{i}", use_container_width=True):
-                st.session_state["prefill_prompt"] = s
+                queue_user_message(s)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Input row
-    st.markdown("---")
-    ip1, ip2 = st.columns([0.85, 0.15])
-    ip1.text_input(
-        " ",
-        key="prompt_draft",
-        placeholder="例）ギフトにしたい（相手: 30代男性 / 予算5,000円 / ノンアル希望）",
-        label_visibility="collapsed",
-    )
-    ip2.button("送信", use_container_width=True, on_click=send_prompt)
+    # chat input (stable)
+    user_txt = st.chat_input("何かお手伝いできることはありますか？")
+    if user_txt:
+        queue_user_message(user_txt)
+
+    # LLM call AFTER UI rendered
+    if st.session_state.get("pending_action"):
+        out = llm_chat(st.session_state["messages"])
+        handle_llm_chat_out(out)
+        st.session_state["pending_action"] = None
+        st.session_state["thinking"] = False
+        st.rerun()
